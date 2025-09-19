@@ -542,6 +542,12 @@ class ParticleTracksWidget(QWidget):
             magic_number_smallest_view_pixels = -8377
             return array[:, :, magic_number_smallest_view_pixels:, :]
 
+        def rotate(array):
+            # Not sure what dimensions 0 and 3 are, but below
+            # the ::-1 in dimension 1 reverses the short (i.e. the y) direction in the images, and
+            # the ::-1 in dimension 2 reverses the long (i.e. the x) direction in the images.
+            return array[:, ::-1, ::-1, :]
+
         # Shuffle the images to avoid bias in the order of the events
         shuffling_indices = np.random.RandomState(self.shuffling_seed).permutation(
             image_count_first
@@ -551,6 +557,7 @@ class ParticleTracksWidget(QWidget):
         for subdir in folder_subdirs:
             stack: dask.array.Array = imread(subdir + "/*")
             stack = crop(stack)
+            stack = rotate(stack)
             # Shuffle each view stack in the same way
             stack = stack[shuffling_indices]
             stacks.append(stack)
