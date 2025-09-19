@@ -2,4 +2,6 @@ https://git-scm.com/downloads/win
 
 python -m pip install "napari[all]"
 
-python -m pip install git+https://github.com/palvarezc/cavendish-particle-tracks.git@v1.0.1
+# On 19th Sept 2025 CGL found this Scripts.txt file on the teaching lab computers had v1.0.1 in the line below.
+# However, it was also clear that version 1.0.2 had been installed, and indeed, since v1.0.1 and v1.0.2 both work (test Sept 2025) the file below has been updated to v1.0.2.
+python -m pip install git+https://github.com/palvarezc/cavendish-particle-tracks.git@v1.0.2
