@@ -56,7 +56,7 @@ def magnification(front_fiducial_1: Fiducial, front_fiducial_2: Fiducial,
     would be the number of cm per pixel for transverse features at the chamber rear
     if CHAMBER_DEPTH were in cm.
 
-    If  the cameras did not move during the data taking, and if the film digitisation process did not introduce
+    If the cameras did not move during the data taking, and if the film digitisation process did not introduce
     scale variations between images, and if all cameras were the same distance from the chamber, then to first order
     (e.g. ignoring lens curvature distortions) the pair (a,b) should be a property of the experiment, rather than a
     property of a certain view, or of a certain events in a certain view. Nonetheless, (a,b) could be re-measured over
