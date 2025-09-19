@@ -1,0 +1,5 @@
+https://git-scm.com/downloads/win
+
+python -m pip install "napari[all]"
+
+python -m pip install git+https://github.com/palvarezc/cavendish-particle-tracks.git@v1.0.1
