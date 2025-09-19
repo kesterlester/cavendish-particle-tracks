@@ -1,6 +1,16 @@
-Below is the file/directory structure that was used in academic year 2024-2025 on the PCs in the teaching laboratories, at least as found byCGL in Sept 2025.
-
+At the foot of this file is a depiction of the file/directory structure that was used in academic year 2024-2025 on the PCs in the teaching laboratories, at least as found byCGL in Sept 2025.
 This structure is reproduced in the "Part 2 Lab" folder in the same directory as this readme file.
+
+
+Furthermore, the end of the output shown after running the following at the windows command prompt (not anaconda! the native command prompt of windows!) ...
+
+python
+import cavendish_particle_tracks
+help(cavendish_particle_tracks)
+
+... shows that cavendish_particle_tracks is installed here:
+
+c:\users\classes\appdata\local\packages\pythonsoftwarefoundation.python.3.11_STUFFFFFFFF\localcache\local-packages\python311\site-packages\cavendish_particle_tracks\__init__.py
 
 
 C:\Users\classes\Documents\Part 2 Lab\Scripts.txt
@@ -8,3 +18,4 @@ C:\Users\classes\Documents\Part 2 Lab\Particle Tracks\start_cpt.py
 C:\Users\classes\Documents\Part 2 Lab\Particle Tracks\cavendish_particle_tracks.bat   <--- shortcut to this on desktop
 C:\Users\classes\Documents\Part 2 Lab\Particle Tracks\CPT.ico
 C:\Users\classes\Documents\Part 2 Lab\Particle Tracks\screenshots
+
