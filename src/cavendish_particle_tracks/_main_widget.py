@@ -504,6 +504,8 @@ class ParticleTracksWidget(QWidget):
             return
 
         folder_subdirs = glob.glob(folder_name + "/*/")
+        folder_subdirs.sort() # Get View2, View1, View3 into order. No reason not to!
+        
         # Checks whether the image folder contains a subdirectory for each view.
         three_subdirectories = len(folder_subdirs) == 3
         # Checks that these subdirectories correspond to event views.
