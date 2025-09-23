@@ -126,7 +126,7 @@ class StereoshiftDialog(QDialog):
 
         # Setup points layer
         self.cal_layers = self._setup_stereoshift_layers()
-        self.parent.viewer.dims.events.current_step.connect(self._update_points_visibility)
+        self.parent.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers)
 
         # Stereoshift related parameters
         self.stereoshift_info = StereoshiftInfo()
@@ -234,15 +234,9 @@ class StereoshiftDialog(QDialog):
         return self._fiducial_views[i + 1]
 
     # Callback for when the 'View' slider changes
-    def _update_points_visibility(self, event):
-        current_view = self.parent.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are x and y
+    def _callback_that_activates_calibration_layers(self, event):
+        self._activate_calibration_layers()
 
-        for i, layer in enumerate(self.cal_layers):
-            if i==current_view:
-                self.parent.viewer.layers.selection.active = layer
-                print("Turn off this line to stop the autolayer change!!")
-
-            layer.visible = (i==current_view)
 
     def _on_click_fiducial(self) -> None:
         """When fiducial is selected, update the name of the fiducial and the points text"""
@@ -358,8 +352,26 @@ class StereoshiftDialog(QDialog):
                 + str(selected_row)
             )
 
-    def reject(self) -> None:
-        """On cancel remove the points_Stereoshift layer"""
+    def _deactivate_calibration_layers(self):
+        """On cancel suppress the points_Stereoshift layer"""
         for layer in self.cal_layers:
-            self.parent._deactivate_calibration_layer(layer)
+            layer.visible = False
+            # self.parent._deactivate_calibration_layer(layer)
+
+    def _activate_calibration_layers(self):
+        current_view = self.parent.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are x and y
+
+        for i, layer in enumerate(self.cal_layers):
+            if i == current_view:
+                self.parent.viewer.layers.selection.active = layer
+                print("Turn off this line to stop the autolayer change!!")
+
+            layer.visible = (i == current_view)
+
+    def show(self) -> None:
+        self._activate_calibration_layers()
+        return super().show()
+
+    def reject(self) -> None:
+        self._deactivate_calibration_layers()
         return super().reject()

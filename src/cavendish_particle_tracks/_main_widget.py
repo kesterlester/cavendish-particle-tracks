@@ -475,7 +475,6 @@ class ParticleTracksWidget(QWidget):
         if self.stereoshift_dlg is not None:
             self.stereoshift_dlg.show()
             self.stereoshift_dlg.raise_()
-            self._activate_calibration_layer(self.stereoshift_dlg.cal_layer)
             return self.stereoshift_dlg
         self.stereoshift_dlg = StereoshiftDialog(self)
         self.stereoshift_dlg.show()
@@ -781,9 +780,12 @@ class ParticleTracksWidget(QWidget):
         )
         self.viewer.layers.selection.active = layer
 
-    def _deactivate_calibration_layer(self, layer):
-        """Hide the calibration layer and move it to the bottom"""
-        self.viewer.layers.select_previous()
-        layer.visible = False
-        # Move the calibration layer to the bottom
-        self.viewer.layers.move(self.viewer.layers.index(layer), 0)
+
+    # Probably no longer needed!
+    # def _deactivate_calibration_layer(self, layer):
+    #    """Hide the calibration layer and move it to the bottom"""
+    #    self.viewer.layers.select_previous()
+    #    layer.visible = False
+    #    # Move the calibration layer to the bottom
+    #    self.viewer.layers.move(self.viewer.layers.index(layer), 0)
+
