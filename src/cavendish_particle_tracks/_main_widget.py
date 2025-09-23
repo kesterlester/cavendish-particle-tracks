@@ -566,7 +566,9 @@ class ParticleTracksWidget(QWidget):
 
         # Concatenate stacks along new spatial dimension such that we have a view, and event slider
         concatenated_stack = dask.array.stack(stacks, axis=0)
-        self.viewer.add_image(concatenated_stack, name=IMAGE_LAYER_NAME)
+        self.viewer.add_image(concatenated_stack,
+                              name=IMAGE_LAYER_NAME,
+                              )
         self.viewer.dims.axis_labels = ("View", "Event", "Y", "X")
 
         # Move to the first event in the series

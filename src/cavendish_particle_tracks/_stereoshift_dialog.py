@@ -49,6 +49,7 @@ class StereoshiftDialog(QDialog):
         self.cbf1.addItem("Back / Front")
         self.cbf1.currentIndexChanged.connect(self._on_click_fiducial)
 
+
         # text boxes for points
         self.textboxes = [QLabel(self) for _ in range(4)]
 
@@ -124,74 +125,103 @@ class StereoshiftDialog(QDialog):
         self.layout().addWidget(self.buttonBox, 15, 0, 1, 3)
 
         # Setup points layer
-        self.cal_layer = self._setup_stereoshift_layer()
+        self.cal_layers = self._setup_stereoshift_layers()
+        self.parent.viewer.dims.events.current_step.connect(self._update_points_visibility)
 
         # Stereoshift related parameters
         self.stereoshift_info = StereoshiftInfo()
         self.stereoshift_info.name = "origin_vertex"
 
-    def _setup_stereoshift_layer(self):
+    def _setup_stereoshift_layers(self):
         # retrieve current camera position
         origin_x = self.parent.camera_center[0]
         origin_y = self.parent.camera_center[1]
         zoom_factor = self.parent.viewer.camera.zoom
         # add the points
+        """
         points = np.array(
             [
-                [
-                    origin_x - 100 / zoom_factor,
-                    origin_y - 200 / zoom_factor,
-                ],
-                [
-                    origin_x + 100 / zoom_factor,
-                    origin_y - 200 / zoom_factor,
-                ],
-                [origin_x - 100 / zoom_factor, origin_y],
-                [origin_x + 100 / zoom_factor, origin_y],
-                [
-                    origin_x - 100 / zoom_factor,
-                    origin_y + 200 / zoom_factor,
-                ],
-                [
-                    origin_x + 100 / zoom_factor,
-                    origin_y + 200 / zoom_factor,
-                ],
+                [ origin_x - 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
+                [ origin_x + 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
+                [ origin_x - 100 / zoom_factor, origin_y],
+                [ origin_x + 100 / zoom_factor, origin_y],
+                [ origin_x - 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
+                [ origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
             ]
         )
+        """
+        points_in_view_0 = np.array([
+            [origin_x - 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
+            [origin_x, origin_y - 200 / zoom_factor, ],
+            [ origin_x + 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
+            ])
+        points_in_view_1 = np.array([
+            [ origin_x - 100 / zoom_factor, origin_y,  ],
+            [origin_x, origin_y, ],
+            [ origin_x + 100 / zoom_factor, origin_y, ],
+        ])
+        points_in_view_2 = np.array([
+            [ origin_x - 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
+            [origin_x, origin_y + 200 / zoom_factor, ],
+            [ origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
+        ])
 
-        labels = ["Reference (Front) view1", "Reference (Front) view2"]
+        points_in_view = [ points_in_view_0, points_in_view_1, points_in_view_2 ]
+        name_of_view = [
+            "View 1 stereoshift data",
+            "View 2 stereoshift data",
+            "View 3 stereoshift data",
+        ]
+
+        colours = [ "#55ff00", # front fiducial (light green)
+                    "#00aa00", # back fiducial (dark green)
+                    "cyan", # point being measured,
+                     ]
+
+        labels = ["FRONT", "back", "point"]
         for item in self._fiducial_views:
             labels += [item.name]
 
-        colors = ["green", "red", "green", "red", "green", "red"]
-        symbols = ["diamond", "diamond", "cross", "cross", "disc", "disc"]
+        symbols = ["x", "x", "disc"]
+        sc = 100
+        symbol_sizes = [4*sc, 1*sc, 1*sc ]
 
+
+        """
         text = {
             "string": labels,
             "size": 14,
             "color": colors,
             "translation": np.array([-30, 0]),
         }
+        """
 
         # create a points layer where the face_color is set by the good_point feature
         # and the edge_color is set via a color map (grayscale) on the confidence
         # feature.
-        points_layer = self.parent.viewer.add_points(
-            points,
-            name="Points_Stereoshift",
-            text=text,
-            size=20,
+        # points_layer =
+
+
+        view_for_layer = [
+            self.parent.viewer.add_points(
+            points_in_view[v],
+            name=name_of_view[v],
+            #text=labels,
+            #size=20,
+            size=symbol_sizes,
             border_width=7,
             border_width_is_relative=False,
-            border_color=colors,
-            face_color=colors,
+            border_color=colours,
+            face_color=colours,
             symbol=symbols,
-        )
+            #out_of_slice_display=False,
+            ) for v in (0,1,2)
+            ]
 
         # set the edge_color mode to colormap
         # points_layer.edge_color_mode = 'colormap'
 
-        return points_layer
+        return view_for_layer
 
     def f(self, i) -> Fiducial:
         if i not in [1, 2]:
@@ -203,9 +233,22 @@ class StereoshiftDialog(QDialog):
             raise IndexError()
         return self._fiducial_views[i + 1]
 
+    # Callback for when the 'View' slider changes
+    def _update_points_visibility(self, event):
+        current_view = self.parent.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are x and y
+
+        for i, layer in enumerate(self.cal_layers):
+            if i==current_view:
+                self.parent.viewer.layers.selection.active = layer
+                print("Turn off this line to stop the autolayer change!!")
+
+            layer.visible = (i==current_view)
+
     def _on_click_fiducial(self) -> None:
         """When fiducial is selected, update the name of the fiducial and the points text"""
 
+        """
+        CGL COMMENTING OUT!
         if self.cbf1.currentIndex() == 0:
             self.f(1).name = "Back fiducial view1"
             self.f(2).name = "Back fiducial view2"
@@ -229,6 +272,8 @@ class StereoshiftDialog(QDialog):
             )
 
         self.cal_layer.refresh()
+        """
+        pass
 
     def _on_click_vertex(self) -> None:
         """When vertex is selected, update the name of the vertex"""
@@ -246,7 +291,7 @@ class StereoshiftDialog(QDialog):
                 self._fiducial_views[i].x,
                 self._fiducial_views[i].y,
             ) = (
-                self.cal_layer.data[i + 2] - self.cal_layer.data[i % 2]
+                77 #self.cal_layer.data[i + 2] - self.cal_layer.data[i % 2]
             )
             self.textboxes[i].setText(str(self._fiducial_views[i].xy))
 
@@ -263,7 +308,7 @@ class StereoshiftDialog(QDialog):
             self.b(2),
             reverse=self.cbf1.currentIndex(),
         )
-        self.stereoshift_info.spoints = self.cal_layer.data[2:]
+        self.stereoshift_info.spoints = 77 #self.cal_layer.data[2:]
 
         # Populate the table
         self.tshift_fiducial.setText(str(self.stereoshift_info.shift_fiducial))
@@ -315,5 +360,6 @@ class StereoshiftDialog(QDialog):
 
     def reject(self) -> None:
         """On cancel remove the points_Stereoshift layer"""
-        self.parent._deactivate_calibration_layer(self.cal_layer)
+        for layer in self.cal_layers:
+            self.parent._deactivate_calibration_layer(layer)
         return super().reject()
