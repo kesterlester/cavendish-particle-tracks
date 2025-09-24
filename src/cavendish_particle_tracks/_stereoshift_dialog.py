@@ -233,7 +233,7 @@ class StereoshiftDialog(QDialog):
                 'color': colours,
                 'size': 12,
                 'anchor': 'center',
-                'translation': np.array([-75, 0]), # move text 25 pixels up
+                'translation': np.array([-150, 0]), # move text 150 pixels up
             }
             layer.types = types
 
