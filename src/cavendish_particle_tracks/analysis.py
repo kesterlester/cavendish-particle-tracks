@@ -19,6 +19,10 @@ FIDUCIAL_BACK = {
     "A": [-15.00, 8.68],
 }  # cm
 
+TYPICAL_IMAGE_LONG_SIZE_PIX = 8377 # This is just typical. No guarantee that any particular image has this size!
+TYPICAL_IMAGE_SHORT_SIZE_PIX = 2753 # This is just typical. No guarantee that any particular image has this size!
+
+
 VIEW_NAMES = ["view1", "view2", "view3"]
 
 EXPECTED_PARTICLES = [

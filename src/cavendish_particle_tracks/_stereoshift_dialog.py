@@ -130,41 +130,18 @@ class StereoshiftDialog(QDialog):
 
     def _setup_stereoshift_layers(self):
         # retrieve current camera position
-        origin_x = self.parent.camera_center[0]
-        origin_y = self.parent.camera_center[1]
-        zoom_factor = self.parent.viewer.camera.zoom
-        # add the points
-        """
-        points = np.array(
-            [
-                [ origin_x - 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
-                [ origin_x + 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
-                [ origin_x - 100 / zoom_factor, origin_y],
-                [ origin_x + 100 / zoom_factor, origin_y],
-                [ origin_x - 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
-                [ origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
-            ]
-        )
-        """
-        points_in_view_0 = np.array([
-            [origin_x - 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
-            [origin_x, origin_y - 200 / zoom_factor, ],
-            [ origin_x + 100 / zoom_factor, origin_y - 200 / zoom_factor, ],
-            ])
-        points_in_view_1 = np.array([
-            [ origin_x - 100 / zoom_factor, origin_y,  ],
-            [origin_x, origin_y, ],
-            [ origin_x + 100 / zoom_factor, origin_y, ],
-        ])
-        points_in_view_2 = np.array([
-            [ origin_x - 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
-            [origin_x, origin_y + 200 / zoom_factor, ],
-            [ origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
-        ])
+        from .analysis import TYPICAL_IMAGE_LONG_SIZE_PIX, TYPICAL_IMAGE_SHORT_SIZE_PIX
+        #origin_x = self.parent.camera_center[0]
+        #origin_y = self.parent.camera_center[1]
+        origin_x = 0.5 * TYPICAL_IMAGE_SHORT_SIZE_PIX # actually how far DOWN !!
+        spread_x = 0.15 * TYPICAL_IMAGE_SHORT_SIZE_PIX # actually vertical spread !!
 
+        point_origin_y = 0.25 * TYPICAL_IMAGE_LONG_SIZE_PIX # actually how far ACROSS !!
+        fid_origin_y = 0.5 * TYPICAL_IMAGE_LONG_SIZE_PIX
+        fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
 
-
-
+        #zoom_factor = self.parent.viewer.camera.zoom
+        zoom_factor = 0.05
 
 
         sc = 100
@@ -173,17 +150,19 @@ class StereoshiftDialog(QDialog):
         labels = [ "point", ]
         symbols = [ "disc", ]
         colours = ["cyan", ]
+        types = ["point", ]
         symbol_sizes = [1 * sc, ]
-        points_in_generic_view = [ [origin_x, origin_y - 100/zoom_factor, ], ]
+        points_in_generic_view = [ [origin_x, point_origin_y, ], ]
 
         # Now position the Front/Back fiducial pairs:
         for i in range(self.num_front_back_fid_pairs):
-            labels += ["FRONT", "back",]
+            labels += [ "", "", ]
+            types += ["front", "back", ]
             symbols += ["x", "x",]
             symbol_sizes += [4*sc, 1*sc,]
             points_in_generic_view += [
-                [origin_x - 20 / zoom_factor, origin_y + (i * 50) / zoom_factor, ],
-                [origin_x + 20 / zoom_factor, origin_y + (i * 50) / zoom_factor, ],
+                [origin_x - spread_x, fid_origin_y + i * fid_step_y, ],
+                [origin_x + spread_x, fid_origin_y + i * fid_step_y, ],
             ]
             if i==0:
                 colours += [
@@ -256,6 +235,7 @@ class StereoshiftDialog(QDialog):
                 'anchor': 'center',
                 'translation': np.array([-75, 0]), # move text 25 pixels up
             }
+            layer.types = types
 
             if self.point_menu_type == self.RIGHT_CLICK:
                 layer.mouse_drag_callbacks.append(self.on_mouse)
@@ -265,12 +245,13 @@ class StereoshiftDialog(QDialog):
 
         return layers
 
-    def rename_point(self, layer, idx, name):
+    def rename_point(self, idx, name):
         #print(f"Renaming point idx={idx} with name={name}")
-        #print(f"before alteration {layer.text}")
-        layer.text.values[idx] = name
-        #print(f"after  alteration {layer.text}")
-        layer.refresh()
+        for layer in self.cal_layers:
+            # print(f"before alteration {layer.text}")
+            layer.text.values[idx] = name
+            #print(f"after  alteration {layer.text}")
+            layer.refresh()
 
     def on_mouse(self, layer, event):
         print(f"Detected mouse event {event} on layer {layer}")
@@ -286,9 +267,11 @@ class StereoshiftDialog(QDialog):
                 return
             i = ind
 
-            print(f" got 1 ")
+            type = layer.types[i]
 
-            def show_menu():
+            print(f" got 1 and type {type}")
+
+            def show_menu(type):
                 # build popup menu
                 menu = QMenu(self.parent.viewer.window._qt_window)
 
@@ -303,19 +286,24 @@ class StereoshiftDialog(QDialog):
                 # fixed_names = ["Alpha", "Beta", "Gamma"]
                 from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
 
-                fixed_names = list(FIDUCIAL_FRONT.keys()) + list(FIDUCIAL_BACK.keys())
+                if type == "front":
+                    fixed_names = list(FIDUCIAL_FRONT.keys())
+                elif type == "back":
+                    fixed_names = list(FIDUCIAL_BACK.keys())
+                else:
+                    fixed_names = ["point"]
 
                 # add fixed names
                 for fname in fixed_names:
                     act = QAction(fname, menu)
-                    act.triggered.connect(lambda _, f=fname: self.rename_point(layer, i, f))
+                    act.triggered.connect(lambda _, f=fname: self.rename_point(i, f))
                     menu.addAction(act)
 
                 print(f" got 2 ")
 
                 # "no name" entry
                 noname = QAction("❌ Clear", menu)
-                noname.triggered.connect(lambda _: self.rename_point(layer, i, ""))
+                noname.triggered.connect(lambda _: self.rename_point(i, ""))
                 menu.addAction(noname)
 
                 print(f" got 3 ")
@@ -329,7 +317,7 @@ class StereoshiftDialog(QDialog):
                         "Enter name:",
                     )
                     if ok and text.strip():
-                        self.rename_point(layer, i, text.strip())
+                        self.rename_point(i, text.strip())
 
                 print(f" got 4 ")
 
@@ -353,7 +341,7 @@ class StereoshiftDialog(QDialog):
             results in our capuring the right click by hiding the 
             right mouse button RELEASE.
             """
-            QTimer.singleShot(100, show_menu)
+            QTimer.singleShot(100, lambda : show_menu(type) )
 
             print(f" got 7 ")
 
