@@ -16,6 +16,8 @@ from qtpy.QtWidgets import (
     QMenu,
     QInputDialog,
 )
+from qtpy.QtGui import QCursor, QMouseEvent
+from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
 
 from ._calculate import depth, length, stereoshift
 from .analysis import Fiducial, StereoshiftInfo
@@ -46,6 +48,11 @@ class StereoshiftDialog(QDialog):
         self.cbf1.addItem("Back / Front")
         self.cbf1.currentIndexChanged.connect(self._on_click_fiducial)
 
+        # Choose one:
+        self.RIGHT_CLICK = "right click"
+        self.DOUBLE_CLICK = "double clic"
+        #self.point_menu_type = self.DOUBLE_CLICK  # Less intuitive but does not get stuck in pan mode afterwards.
+        self.point_menu_type = self.RIGHT_CLICK # More intuitive but gets stuck in pan mode afterwards.
 
         # text boxes for points
         self.textboxes = [QLabel(self) for _ in range(4)]
@@ -233,7 +240,7 @@ class StereoshiftDialog(QDialog):
             self.parent.viewer.add_points(
             points_in_view[v],
             name=name_of_view[v],
-            #text=labels,
+            text=labels,
             #size=20,
             size=symbol_sizes,
             border_width=7,
@@ -248,19 +255,26 @@ class StereoshiftDialog(QDialog):
         # set the edge_color mode to colormap
         # points_layer.edge_color_mode = 'colormap'
         for layer in layers:
-            layer.mouse_drag_callbacks.append(self.on_mouse)
-
+            if self.point_menu_type == self.RIGHT_CLICK:
+                layer.mouse_drag_callbacks.append(self.on_mouse)
+            if self.point_menu_type == self.DOUBLE_CLICK:
+                layer.mouse_double_click_callbacks.clear() # want to disable double click zoom
+                layer.mouse_double_click_callbacks.append(self.on_mouse)
         return layers
 
     def rename_point(self, layer, idx, name):
         print(f"Renaming point idx={idx} with name={name}")
-        pass
+        #pass
+        layer.text.string.array[idx] = name
         #layer.properties['name'][idx] = name
         layer.refresh()
 
     def on_mouse(self, layer, event):
         print(f"Detected mouse event {event} on layer {layer}")
-        if event.button == 2:  # right click
+        if (
+                self.point_menu_type == self.DOUBLE_CLICK or
+                self.point_menu_type == self.RIGHT_CLICK and event.button == 2
+            ):
             coords = layer.world_to_data(event.position)
             print(f"coords = {coords}")
             ind = layer.get_value(coords, world=True)
@@ -271,50 +285,88 @@ class StereoshiftDialog(QDialog):
 
             print(f" got 1 ")
 
-            # build popup menu
-            menu = QMenu(self.parent.viewer.window._qt_window)
+            def show_menu():
+                # build popup menu
+                menu = QMenu(self.parent.viewer.window._qt_window)
 
-            fixed_names = ["Alpha", "Beta", "Gamma"]
+                fixed_names = ["Alpha", "Beta", "Gamma"]
 
-            # add fixed names
-            for fname in fixed_names:
-                act = QAction(fname, menu)
-                act.triggered.connect(lambda _, f=fname: self.rename_point(layer, i, f))
-                menu.addAction(act)
+                # add fixed names
+                for fname in fixed_names:
+                    act = QAction(fname, menu)
+                    act.triggered.connect(lambda _, f=fname: self.rename_point(layer, i, f))
+                    menu.addAction(act)
 
-            print(f" got 2 ")
+                print(f" got 2 ")
 
-            # "no name" entry
-            noname = QAction("❌ Clear", menu)
-            noname.triggered.connect(lambda _: self.rename_point(layer, i, ""))
-            menu.addAction(noname)
+                # "no name" entry
+                noname = QAction("❌ Clear", menu)
+                noname.triggered.connect(lambda _: self.rename_point(layer, i, ""))
+                menu.addAction(noname)
 
-            print(f" got 3 ")
+                print(f" got 3 ")
 
-            # custom name entry
-            def custom_name():
-                print(f"In custom name")
-                text, ok = QInputDialog.getText(
-                    self.parent.viewer.window._qt_window,
-                    "Custom name",
-                    "Enter name:",
-                )
-                if ok and text.strip():
-                    self.rename_point(layer, i, text.strip())
+                # custom name entry
+                def custom_name():
+                    print(f"In custom name")
+                    text, ok = QInputDialog.getText(
+                        self.parent.viewer.window._qt_window,
+                        "Custom name",
+                        "Enter name:",
+                    )
+                    if ok and text.strip():
+                        self.rename_point(layer, i, text.strip())
 
-            print(f" got 4 ")
+                print(f" got 4 ")
 
-            menu.addSeparator()
-            custom = QAction("✏️ Custom…", menu)
-            custom.triggered.connect(custom_name)
-            menu.addAction(custom)
+                menu.addSeparator()
+                custom = QAction("✏️ Custom…", menu)
+                custom.triggered.connect(custom_name)
+                menu.addAction(custom)
 
-            print(f" got 5 ")
+                print(f" got 5 ")
 
-            # popup at cursor position
-            menu.exec_(event.native.globalPos())
+                # popup at cursor position
+                menu.exec_(pos) # use captured global cursor pos -- see (*) below
 
-            print(f" got 6 ")
+            print(" got 6 ")
+            # capture cursor now
+            pos = QCursor.pos() # (*)
+
+            QTimer.singleShot(100, show_menu)
+
+            if self.point_menu_type == self.RIGHT_CLICK:
+                # Find a way to release the mouse grab.
+
+
+                def release_mouse(canvas):
+                    if hasattr(canvas.events, "mouse_wheel"):
+                        print(f"found mouse_wheel on {canvas}")
+                        canvas.events.mouse_wheel(
+                            delta=(0, 0),  # no scroll
+                            pos=(0, 0),  # position in canvas coords; doesn’t matter much
+                            modifiers=[],
+                        )
+                    else:
+                        print(f"Did not find mouse_wheel on {canvas}")
+
+                    if hasattr(canvas.events, "mouse_release on {canvas}"):
+                        print(f"found mouse_release")
+                        canvas.events.mouse_release(
+                            buttons=[],  # [2] if you want to say "right button was released", else []
+                            pos=(0, 0),  # position in canvas coords; doesn’t matter much
+                            modifiers=[],
+                        )
+                    else:
+                        print(f"Did not find mouse_release on {canvas}")
+
+
+                QTimer.singleShot(100, lambda: release_mouse(self.parent.viewer.window._qt_viewer.canvas))
+                QTimer.singleShot(100, lambda: release_mouse(self.parent.viewer))
+                QTimer.singleShot(100, lambda: release_mouse(self.parent.viewer.window._qt_viewer.canvas._scene_canvas))
+
+
+            print(f" got 7 ")
 
 
     # Callback for when the 'View' slider changes
