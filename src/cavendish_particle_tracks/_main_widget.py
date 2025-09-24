@@ -789,7 +789,6 @@ class ParticleTracksWidget(QWidget):
         )
         self.viewer.layers.selection.active = layer
 
-
     # Probably no longer needed once mag and angle dialogs work same way as stereo!
     def _deactivate_calibration_layer(self, layer):
         """Hide the calibration layer and move it to the bottom"""
