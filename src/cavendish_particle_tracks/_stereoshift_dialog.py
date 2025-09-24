@@ -12,6 +12,9 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QTableWidgetItem,
+    QAction,
+    QMenu,
+    QInputDialog,
 )
 
 from ._calculate import depth, length, stereoshift
@@ -226,7 +229,7 @@ class StereoshiftDialog(QDialog):
         # feature.
         # points_layer =
 
-        view_for_layer = [
+        layers = [
             self.parent.viewer.add_points(
             points_in_view[v],
             name=name_of_view[v],
@@ -244,8 +247,75 @@ class StereoshiftDialog(QDialog):
 
         # set the edge_color mode to colormap
         # points_layer.edge_color_mode = 'colormap'
+        for layer in layers:
+            layer.mouse_drag_callbacks.append(self.on_mouse)
 
-        return view_for_layer
+        return layers
+
+    def rename_point(self, layer, idx, name):
+        print(f"Renaming point idx={idx} with name={name}")
+        pass
+        #layer.properties['name'][idx] = name
+        layer.refresh()
+
+    def on_mouse(self, layer, event):
+        print(f"Detected mouse event {event} on layer {layer}")
+        if event.button == 2:  # right click
+            coords = layer.world_to_data(event.position)
+            print(f"coords = {coords}")
+            ind = layer.get_value(coords, world=True)
+            print(f"ind is {ind}")
+            if ind is None:
+                return
+            i = ind
+
+            print(f" got 1 ")
+
+            # build popup menu
+            menu = QMenu(self.parent.viewer.window._qt_window)
+
+            fixed_names = ["Alpha", "Beta", "Gamma"]
+
+            # add fixed names
+            for fname in fixed_names:
+                act = QAction(fname, menu)
+                act.triggered.connect(lambda _, f=fname: self.rename_point(layer, i, f))
+                menu.addAction(act)
+
+            print(f" got 2 ")
+
+            # "no name" entry
+            noname = QAction("❌ Clear", menu)
+            noname.triggered.connect(lambda _: self.rename_point(layer, i, ""))
+            menu.addAction(noname)
+
+            print(f" got 3 ")
+
+            # custom name entry
+            def custom_name():
+                print(f"In custom name")
+                text, ok = QInputDialog.getText(
+                    self.parent.viewer.window._qt_window,
+                    "Custom name",
+                    "Enter name:",
+                )
+                if ok and text.strip():
+                    self.rename_point(layer, i, text.strip())
+
+            print(f" got 4 ")
+
+            menu.addSeparator()
+            custom = QAction("✏️ Custom…", menu)
+            custom.triggered.connect(custom_name)
+            menu.addAction(custom)
+
+            print(f" got 5 ")
+
+            # popup at cursor position
+            menu.exec_(event.native.globalPos())
+
+            print(f" got 6 ")
+
 
     # Callback for when the 'View' slider changes
     def _callback_that_activates_calibration_layers(self, event):
