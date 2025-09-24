@@ -245,12 +245,25 @@ class StereoshiftDialog(QDialog):
 
         return layers
 
-    def rename_point(self, idx, name):
+    def rename_point(self, idx, name, type):
         #print(f"Renaming point idx={idx} with name={name}")
+
+        other_idx = None # Default
+        other_name = None # Default
+        if type == "front":
+            other_idx = idx + 1 # we store front-then-back, so back is +1 on.
+            other_name = name[:-1] # all bar the last character (to remove prime)
+        if type == "back":
+            other_idx = idx - 1 # we store front-then-back, so front is -1 on.
+            other_name = name + "'"
+
         for layer in self.cal_layers:
             # print(f"before alteration {layer.text}")
             layer.text.values[idx] = name
             #print(f"after  alteration {layer.text}")
+            if other_idx is not None and other_name is not None:
+                layer.text.values[other_idx] = other_name
+
             layer.refresh()
 
     def on_mouse(self, layer, event):
@@ -296,14 +309,14 @@ class StereoshiftDialog(QDialog):
                 # add fixed names
                 for fname in fixed_names:
                     act = QAction(fname, menu)
-                    act.triggered.connect(lambda _, f=fname: self.rename_point(i, f))
+                    act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
                     menu.addAction(act)
 
                 print(f" got 2 ")
 
                 # "no name" entry
                 noname = QAction("❌ Clear", menu)
-                noname.triggered.connect(lambda _: self.rename_point(i, ""))
+                noname.triggered.connect(lambda _: self.rename_point(i, "", type))
                 menu.addAction(noname)
 
                 print(f" got 3 ")
@@ -317,7 +330,7 @@ class StereoshiftDialog(QDialog):
                         "Enter name:",
                     )
                     if ok and text.strip():
-                        self.rename_point(i, text.strip())
+                        self.rename_point(i, text.strip(), type)
 
                 print(f" got 4 ")
 
