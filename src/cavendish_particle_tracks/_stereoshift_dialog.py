@@ -29,13 +29,7 @@ class StereoshiftDialog(QDialog):
 
         self.setWindowTitle("Stereoshift")
 
-        FIDUCIAL_VIEWS = [
-            "Back fiducial view1",
-            "Back fiducial view2",
-            "Point view1",
-            "Point view2",
-        ]
-        self._fiducial_views = [Fiducial(view_name) for view_name in FIDUCIAL_VIEWS]
+        self.num_front_back_fid_pairs = 3
 
         # drop-down lists of vertex
         self.vertex_combobox = QComboBox()
@@ -166,26 +160,57 @@ class StereoshiftDialog(QDialog):
             [ origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor, ],
         ])
 
-        points_in_view = [ points_in_view_0, points_in_view_1, points_in_view_2 ]
-        name_of_view = [
-            "View 1 stereoshift data",
-            "View 2 stereoshift data",
-            "View 3 stereoshift data",
+
+
+
+
+
+        sc = 100
+
+        # First position the point being measured:
+        labels = [ "point", ]
+        symbols = [ "disc", ]
+        colours = ["cyan", ]
+        symbol_sizes = [1 * sc, ]
+        points_in_generic_view = [ [origin_x, origin_y - 100/zoom_factor, ], ]
+
+        # Now position the Front/Back fiducial pairs:
+        for i in range(self.num_front_back_fid_pairs):
+            labels += ["FRONT", "back",]
+            symbols += ["x", "x",]
+            symbol_sizes += [4*sc, 1*sc,]
+            points_in_generic_view += [
+                [origin_x - 20 / zoom_factor, origin_y + (i * 50) / zoom_factor, ],
+                [origin_x + 20 / zoom_factor, origin_y + (i * 50) / zoom_factor, ],
+            ]
+            if i==0:
+                colours += [
+                    "#55ff00",  # front fiducial (light green)
+                    "#00aa00",  # back fiducial (dark green)
+                    ]
+            elif i==1:
+                colours += [
+                    "#ff5500",  # front fiducial (light red)
+                    "#aa0000",  # back fiducial (dark red)
+                ]
+            else:
+                colours += [
+                    "#5500ff",  # front fiducial (light blue)
+                    "#0000aa",  # back fiducial (dark blue)
+                ]
+
+        view_indices = (0, 1, 2)
+
+        name_of_view = [ f"View {v} calibration layer" for v in view_indices ]
+
+        # Displace the generic points 100 to the left, or not at all, or 100 to the right, depending on view:
+        points_in_view = [
+            np.array([ np.array(point)+np.array([(v-1)*100, 0,]) for point in points_in_generic_view ])
+            for v in view_indices
         ]
 
-        colours = [ "#55ff00", # front fiducial (light green)
-                    "#00aa00", # back fiducial (dark green)
-                    "cyan", # point being measured,
-                     ]
-
-        labels = ["FRONT", "back", "point"]
-        for item in self._fiducial_views:
-            labels += [item.name]
-
-        symbols = ["x", "x", "disc"]
-        sc = 100
-        symbol_sizes = [4*sc, 1*sc, 1*sc ]
-
+        for v in view_indices:
+            print(f"Point in view {v} are {points_in_view[v]}")
 
         """
         text = {
@@ -201,7 +226,6 @@ class StereoshiftDialog(QDialog):
         # feature.
         # points_layer =
 
-
         view_for_layer = [
             self.parent.viewer.add_points(
             points_in_view[v],
@@ -215,23 +239,13 @@ class StereoshiftDialog(QDialog):
             face_color=colours,
             symbol=symbols,
             #out_of_slice_display=False,
-            ) for v in (0,1,2)
+            ) for v in view_indices
             ]
 
         # set the edge_color mode to colormap
         # points_layer.edge_color_mode = 'colormap'
 
         return view_for_layer
-
-    def f(self, i) -> Fiducial:
-        if i not in [1, 2]:
-            raise IndexError()
-        return self._fiducial_views[i - 1]
-
-    def b(self, i) -> Fiducial:
-        if i not in [1, 2]:
-            raise IndexError()
-        return self._fiducial_views[i + 1]
 
     # Callback for when the 'View' slider changes
     def _callback_that_activates_calibration_layers(self, event):

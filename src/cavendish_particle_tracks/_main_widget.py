@@ -49,6 +49,7 @@ class ParticleTracksWidget(QWidget):
         self,
         napari_viewer: napari.Viewer,
         docking_area: str = "right",
+        data_folder = None,
     ):
         super().__init__()
         self.viewer: napari.Viewer = napari_viewer
@@ -162,6 +163,9 @@ class ParticleTracksWidget(QWidget):
         def _on_layerlist_changed(event):
             """When the layer list changes, update the button availability"""
             self.set_button_availability()
+
+        if data_folder is not None:
+            self._load_data_from(data_folder)
 
     def hideEvent(self, event):
         """When the widget is 'closed' (napari just hides it), show the layer buttons again.
@@ -499,6 +503,10 @@ class ParticleTracksWidget(QWidget):
             | QFileDialog.HideNameFilterDetails,
         )
 
+        self._load_data_from(folder_name)
+
+    def _load_data_from(self, folder_name):
+
         if folder_name in {"", None}:
             return
 
@@ -770,6 +778,7 @@ class ParticleTracksWidget(QWidget):
 
         napari.utils.notifications.show_info("Data saved to " + file_name)
 
+    # Probably no longer needed once mag and angle dialogs work same way as stereo!
     def _activate_calibration_layer(self, layer):
         """Show the calibration layer and move it to the top"""
         layer.visible = True
@@ -781,11 +790,11 @@ class ParticleTracksWidget(QWidget):
         self.viewer.layers.selection.active = layer
 
 
-    # Probably no longer needed!
-    # def _deactivate_calibration_layer(self, layer):
-    #    """Hide the calibration layer and move it to the bottom"""
-    #    self.viewer.layers.select_previous()
-    #    layer.visible = False
-    #    # Move the calibration layer to the bottom
-    #    self.viewer.layers.move(self.viewer.layers.index(layer), 0)
+    # Probably no longer needed once mag and angle dialogs work same way as stereo!
+    def _deactivate_calibration_layer(self, layer):
+        """Hide the calibration layer and move it to the bottom"""
+        self.viewer.layers.select_previous()
+        layer.visible = False
+        # Move the calibration layer to the bottom
+        self.viewer.layers.move(self.viewer.layers.index(layer), 0)
 

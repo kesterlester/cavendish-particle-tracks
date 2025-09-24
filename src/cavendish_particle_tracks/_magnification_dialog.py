@@ -137,22 +137,22 @@ class MagnificationDialog(QDialog):
 
     def _on_click_add_coords_f1(self) -> None:
         """Add first front fiducial"""
-        self.f1.name = self.front1_fiducial_combobox.currentText()
+
         self.f1.x, self.f1.y = self._add_coords(0)
 
     def _on_click_add_coords_f2(self) -> None:
         """Add second front fiducial"""
-        self.f2.name = self.front2_fiducial_combobox.currentText()
+
         self.f2.x, self.f2.y = self._add_coords(1)
 
     def _on_click_add_coords_b1(self) -> None:
         """Add first back fiducial"""
-        self.b1.name = self.back1_fiducial_combobox.currentText()
+
         self.b1.x, self.b1.y = self._add_coords(2)
 
     def _on_click_add_coords_b2(self) -> None:
         """Add second back fiducial"""
-        self.b2.name = self.back2_fiducial_combobox.currentText()
+
         self.b2.x, self.b2.y = self._add_coords(3)
 
     def _add_coords(self, fiducial: int) -> list[float]:
@@ -175,11 +175,17 @@ class MagnificationDialog(QDialog):
     def _on_click_magnification(self) -> None:
         """When 'Calculate magnification' button is clicked, calculate magnification and populate table"""
 
+        self.f1.name = self.front1_fiducial_combobox.currentText()
+        self.f2.name = self.front2_fiducial_combobox.currentText()
+        self.b1.name = self.back1_fiducial_combobox.currentText()
+        self.b2.name = self.back2_fiducial_combobox.currentText()
+
         # Need something like this but a bit better
         if not (self.f1.name and self.f2.name and self.b1.name and self.b2.name):
-            print("Select fiducials to calcuate the magnification")
+            print("Name the fiducials to calculate the magnification")
             return
 
+        print(f"Calculating the magnification from {self.f1}, {self.f2}, {self.b1}, {self.b2}")
         self.a, self.b = magnification(self.f1, self.f2, self.b1, self.b2)
 
         self.table.setItem(0, 0, QTableWidgetItem(str(self.a)))

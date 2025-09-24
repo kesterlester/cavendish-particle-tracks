@@ -9,8 +9,13 @@ from cavendish_particle_tracks import ParticleTracksWidget
 viewer = Viewer()
 plugin_docking_area = "bottom"
 
-# Create the plugin
-plugin_widget = ParticleTracksWidget(viewer, docking_area=plugin_docking_area)
+data_folder=None
+
+# If developers/debuggers may wish to uncomment the next line
+data_folder="../cavendish-particle-tracks-data/"
+
+# Create the plugin:
+plugin_widget = ParticleTracksWidget(viewer, docking_area=plugin_docking_area, data_folder=data_folder )
 
 # Add plugin to the viewer
 dock_widget = viewer.window.add_dock_widget(
