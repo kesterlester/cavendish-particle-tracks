@@ -289,7 +289,18 @@ class StereoshiftDialog(QDialog):
                 # build popup menu
                 menu = QMenu(self.parent.viewer.window._qt_window)
 
-                fixed_names = ["Alpha", "Beta", "Gamma"]
+                header = QAction("Set name", menu)
+                header.setEnabled(False)  # makes it unclickable
+                font = header.font()
+                font.setBold(True)
+                header.setFont(font)
+                menu.addAction(header)
+                menu.addSeparator()
+
+                # fixed_names = ["Alpha", "Beta", "Gamma"]
+                from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
+
+                fixed_names = list(FIDUCIAL_FRONT.keys()) + list(FIDUCIAL_BACK.keys())
 
                 # add fixed names
                 for fname in fixed_names:
@@ -320,7 +331,7 @@ class StereoshiftDialog(QDialog):
                 print(f" got 4 ")
 
                 menu.addSeparator()
-                custom = QAction("✏️ Custom…", menu)
+                custom = QAction("Custom name ...", menu)
                 custom.triggered.connect(custom_name)
                 menu.addAction(custom)
 
@@ -330,41 +341,16 @@ class StereoshiftDialog(QDialog):
                 menu.exec_(pos) # use captured global cursor pos -- see (*) below
 
             print(" got 6 ")
+
             # capture cursor now
             pos = QCursor.pos() # (*)
 
+            """
+            We can't just all show_menu() in the next line as it 
+            results in our capuring the right click by hiding the 
+            right mouse button RELEASE.
+            """
             QTimer.singleShot(100, show_menu)
-
-            if self.point_menu_type == self.RIGHT_CLICK:
-                # Find a way to release the mouse grab.
-
-
-                def release_mouse(canvas):
-                    if hasattr(canvas.events, "mouse_wheel"):
-                        print(f"found mouse_wheel on {canvas}")
-                        canvas.events.mouse_wheel(
-                            delta=(0, 0),  # no scroll
-                            pos=(0, 0),  # position in canvas coords; doesn’t matter much
-                            modifiers=[],
-                        )
-                    else:
-                        print(f"Did not find mouse_wheel on {canvas}")
-
-                    if hasattr(canvas.events, "mouse_release on {canvas}"):
-                        print(f"found mouse_release")
-                        canvas.events.mouse_release(
-                            buttons=[],  # [2] if you want to say "right button was released", else []
-                            pos=(0, 0),  # position in canvas coords; doesn’t matter much
-                            modifiers=[],
-                        )
-                    else:
-                        print(f"Did not find mouse_release on {canvas}")
-
-
-                QTimer.singleShot(100, lambda: release_mouse(self.parent.viewer.window._qt_viewer.canvas))
-                QTimer.singleShot(100, lambda: release_mouse(self.parent.viewer))
-                QTimer.singleShot(100, lambda: release_mouse(self.parent.viewer.window._qt_viewer.canvas._scene_canvas))
-
 
             print(f" got 7 ")
 
