@@ -227,14 +227,15 @@ class StereoshiftDialog(QDialog):
         # and the edge_color is set via a color map (grayscale) on the confidence
         # feature.
         # points_layer =
+        props = {'labels': labels, }
 
         layers = [
             self.parent.viewer.add_points(
             points_in_view[v],
             name=name_of_view[v],
-            text=labels,
             #size=20,
             size=symbol_sizes,
+            properties=props,
             border_width=7,
             border_width_is_relative=False,
             border_color=colours,
@@ -247,18 +248,28 @@ class StereoshiftDialog(QDialog):
         # set the edge_color mode to colormap
         # points_layer.edge_color_mode = 'colormap'
         for layer in layers:
+
+            layer.text = {
+                'string': labels,
+                'color': colours,
+                'size': 12,
+                'anchor': 'center',
+                'translation': np.array([-75, 0]), # move text 25 pixels up
+            }
+
             if self.point_menu_type == self.RIGHT_CLICK:
                 layer.mouse_drag_callbacks.append(self.on_mouse)
             if self.point_menu_type == self.DOUBLE_CLICK:
                 layer.mouse_double_click_callbacks.clear() # want to disable double click zoom
                 layer.mouse_double_click_callbacks.append(self.on_mouse)
+
         return layers
 
     def rename_point(self, layer, idx, name):
-        print(f"Renaming point idx={idx} with name={name}")
-        #pass
-        layer.text.string.array[idx] = name
-        #layer.properties['name'][idx] = name
+        #print(f"Renaming point idx={idx} with name={name}")
+        #print(f"before alteration {layer.text}")
+        layer.text.values[idx] = name
+        #print(f"after  alteration {layer.text}")
         layer.refresh()
 
     def on_mouse(self, layer, event):
