@@ -42,12 +42,6 @@ class StereoshiftDialog(QDialog):
         self.vertex_combobox.addItem("Decay vertex")
         self.vertex_combobox.currentIndexChanged.connect(self._on_click_vertex)
 
-        # drop-down lists of fiducials
-        self.cbf1 = QComboBox()
-        self.cbf1.addItem("Front / Back")
-        self.cbf1.addItem("Back / Front")
-        self.cbf1.currentIndexChanged.connect(self._on_click_fiducial)
-
         # Choose one:
         self.RIGHT_CLICK = "right click"
         self.DOUBLE_CLICK = "double clic"
@@ -94,8 +88,6 @@ class StereoshiftDialog(QDialog):
         self.setLayout(QGridLayout())
         self.layout().addWidget(QLabel("Select Vertex"), 0, 0, 1, 2)
         self.layout().addWidget(self.vertex_combobox, 0, 2)
-        self.layout().addWidget(QLabel("Select Reference / Fiducial"), 1, 0, 1, 2)
-        self.layout().addWidget(self.cbf1, 1, 2)
         self.layout().addWidget(QLabel("Fiducial coordinates"), 2, 0, 1, 2)
         for i, widget in enumerate(
             [lviewf1, self.textboxes[0], lviewf2, self.textboxes[1]]
@@ -359,38 +351,6 @@ class StereoshiftDialog(QDialog):
     def _callback_that_activates_calibration_layers(self, event):
         self._activate_calibration_layers()
 
-
-    def _on_click_fiducial(self) -> None:
-        """When fiducial is selected, update the name of the fiducial and the points text"""
-
-        """
-        CGL COMMENTING OUT!
-        if self.cbf1.currentIndex() == 0:
-            self.f(1).name = "Back fiducial view1"
-            self.f(2).name = "Back fiducial view2"
-            self.cal_layer.text.string.array[0] = "Reference (Front) view1"
-            self.cal_layer.text.string.array[1] = "Reference (Front) view2"
-            self.cal_layer.text.string.array[2] = self.f(1).name
-            self.cal_layer.text.string.array[3] = self.f(2).name
-            self.label_stereoshift.setText(
-                "Stereo shift (shift_p/shift_f = depth_p/depth_f)"
-            )
-
-        if self.cbf1.currentIndex() == 1:
-            self.f(1).name = "Front fiducial view1"
-            self.f(2).name = "Front fiducial view2"
-            self.cal_layer.text.string.array[0] = "Reference (Back) view1"
-            self.cal_layer.text.string.array[1] = "Reference (Back) view2"
-            self.cal_layer.text.string.array[2] = self.f(1).name
-            self.cal_layer.text.string.array[3] = self.f(2).name
-            self.label_stereoshift.setText(
-                "Stereo shift (shift_p/shift_f = 1 - depth_p/depth_f)"
-            )
-
-        self.cal_layer.refresh()
-        """
-        pass
-
     def _on_click_vertex(self) -> None:
         """When vertex is selected, update the name of the vertex"""
         if self.vertex_combobox.currentIndex() == 0:
@@ -422,7 +382,7 @@ class StereoshiftDialog(QDialog):
             self.f(2),
             self.b(1),
             self.b(2),
-            reverse=self.cbf1.currentIndex(),
+            reverse=False,
         )
         self.stereoshift_info.spoints = 77 #self.cal_layer.data[2:]
 
