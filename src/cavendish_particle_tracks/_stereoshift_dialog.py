@@ -192,10 +192,10 @@ class StereoshiftDialog(QDialog):
 
         # If in debug mode can replace the points and labels with ones that are physically interesting.
         # Don't give this option to the students!
-        debug_mode = True
+        debug_fiducial_mode = True
 
         # The pre-made points assume 3 pairs of fiducials in each view, so:
-        if debug_mode and self.num_front_back_fid_pairs == 3:
+        if debug_fiducial_mode and self.num_front_back_fid_pairs == 3:
             from .analysis import debug_points_view_0_calibration_layer
             from .analysis import debug_points_view_1_calibration_layer
             from .analysis import debug_points_view_2_calibration_layer
