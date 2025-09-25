@@ -190,19 +190,22 @@ class StereoshiftDialog(QDialog):
             for v in view_indices
         ]
 
-        # If in debug mode can replace the points with ones that are physically interesting.
-        # Don't give these points to the students!
-        # The pre-made points assume 3 pairs of fiducials in each view, so
+        # If in debug mode can replace the points and labels with ones that are physically interesting.
+        # Don't give this option to the students!
         debug_mode = True
+
+        # The pre-made points assume 3 pairs of fiducials in each view, so:
         if debug_mode and self.num_front_back_fid_pairs == 3:
             from .analysis import debug_points_view_0_calibration_layer
             from .analysis import debug_points_view_1_calibration_layer
             from .analysis import debug_points_view_2_calibration_layer
+            from .analysis import debug_point_labels_all_calibration_layers
             points_in_view = [
                 debug_points_view_0_calibration_layer,
                 debug_points_view_1_calibration_layer,
                 debug_points_view_2_calibration_layer,
             ] # overwrites old points_in_view
+            labels = debug_point_labels_all_calibration_layers
 
         for v in view_indices:
             print(f"Point in view {v} are {points_in_view[v]}")

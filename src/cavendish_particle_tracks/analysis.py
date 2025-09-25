@@ -44,6 +44,7 @@ debug_points_view_2_calibration_layer = np.array([[1513.9479341 , 4522.05154178]
        [1551.4374658 , 4145.4012863 ],
        [1215.94063266, 7113.32379595],
        [1559.19637273, 6401.92405786]])
+debug_point_labels_all_calibration_layers = ['point', "B'", 'B', "C'", 'C', "D'", 'D']
 
 """
 napari.current_viewer().layers[-3]
