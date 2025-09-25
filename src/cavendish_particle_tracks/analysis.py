@@ -22,7 +22,7 @@ FIDUCIAL_BACK = {
     "A": [-15.00, 8.68],
 }  # cm
 
-
+# These are approximate locations for an interesting point in event XXXX and three pairs of fiducials in each view.
 debug_points_view_0_calibration_layer = np.array([[1241.8771528 , 4458.80208973],
        [ 547.27520267, 5571.46964481],
        [ 407.311707  , 5217.56602448],
@@ -30,7 +30,6 @@ debug_points_view_0_calibration_layer = np.array([[1241.8771528 , 4458.80208973]
        [1054.91736458, 4083.25071514],
        [1420.60685555, 7057.13841692],
        [1073.42405181, 6349.22310964]])
-
 debug_points_view_1_calibration_layer = np.array([[1492.08818685, 4420.03076255],
        [ 563.13304728, 5126.15190679],
        [ 769.77696761, 5365.1043757 ],
@@ -38,7 +37,6 @@ debug_points_view_1_calibration_layer = np.array([[1492.08818685, 4420.03076255]
        [1417.98929182, 4235.67176953],
        [1425.5264684 , 6605.98654768],
        [1427.87846858, 6491.42811567]])
-
 debug_points_view_2_calibration_layer = np.array([[1513.9479341 , 4522.05154178],
        [ 353.51428451, 5631.43486332],
        [ 901.86361306, 5273.77193882],
