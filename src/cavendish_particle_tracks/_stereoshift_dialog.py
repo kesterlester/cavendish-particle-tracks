@@ -182,7 +182,7 @@ class StereoshiftDialog(QDialog):
 
         view_indices = (0, 1, 2)
 
-        name_of_view = [ f"View {v} calibration layer" for v in view_indices ]
+        name_of_view = [ f"Calibration workspace for view {v}" for v in view_indices ]
 
         # Displace the generic points 100 to the left, or not at all, or 100 to the right, depending on view:
         points_in_view = [
