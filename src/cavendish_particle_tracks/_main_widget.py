@@ -41,7 +41,7 @@ IMAGE_LAYER_NAME = "Bubble Chamber Data"
 
 _singleton_instance = None
 
-def get_singleton(viewer=None, docking_area: str = "right", data_folder=None):
+def get_singleton(viewer=None, docking_area: str = "bottom", data_folder=None):
     """Return the singleton ParticleTracksWidget, creating it if necessary."""
     global _singleton_instance
     if _singleton_instance is None:
@@ -58,7 +58,7 @@ class ParticleTracksWidget(QWidget):
     def __init__(
         self,
         napari_viewer: napari.Viewer,
-        docking_area: str = "right",
+        docking_area: str = "bottom",
         data_folder = None,
     ):
         super().__init__()
