@@ -11,7 +11,7 @@ plugin_docking_area = "bottom"
 
 data_folder=None
 
-# If developers/debuggers may wish to uncomment the next line
+# Developers may wish to uncomment the next line
 data_folder="../cavendish-particle-tracks-data/"
 
 # Create the plugin:
