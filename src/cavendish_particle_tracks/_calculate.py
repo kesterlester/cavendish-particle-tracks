@@ -34,7 +34,6 @@ def length(a: Point, b: Point) -> float:
     pb = np.array(b)
     return np.linalg.norm(pa - pb)
 
-
 def magnification(front_fiducial_1: Fiducial, front_fiducial_2: Fiducial,
                   back_fiducial_1: Fiducial, back_fiducial_2: Fiducial):
     """

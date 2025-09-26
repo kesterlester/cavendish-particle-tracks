@@ -21,6 +21,7 @@ from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
 
 from ._calculate import depth, length, stereoshift
 from .analysis import Fiducial, StereoshiftInfo
+from ._calibrations import CalibrationManager
 
 if TYPE_CHECKING:
     from ._main_widget import ParticleTracksWidget
@@ -34,19 +35,11 @@ class StereoshiftDialog(QDialog):
 
         self.setWindowTitle("Stereoshift")
 
-        self.num_front_back_fid_pairs = 3
-
         # drop-down lists of vertex
         self.vertex_combobox = QComboBox()
         self.vertex_combobox.addItem("Origin vertex")
         self.vertex_combobox.addItem("Decay vertex")
         self.vertex_combobox.currentIndexChanged.connect(self._on_click_vertex)
-
-        # Choose one:
-        self.RIGHT_CLICK = "right click"
-        self.DOUBLE_CLICK = "double clic"
-        #self.point_menu_type = self.DOUBLE_CLICK  # Less intuitive but does not get stuck in pan mode afterwards.
-        self.point_menu_type = self.RIGHT_CLICK # More intuitive but gets stuck in pan mode afterwards.
 
         # text boxes for points
         self.textboxes = [QLabel(self) for _ in range(4)]
@@ -121,264 +114,17 @@ class StereoshiftDialog(QDialog):
         self.layout().addWidget(self.buttonBox, 15, 0, 1, 3)
 
         # Setup points layer
-        self.cal_layers = self._setup_stereoshift_layers()
-        self.parent.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers)
+        #self.generic_calibration_layers = self._setup_stereoshift_layers()
+        self.calibration_manager = CalibrationManager(self.parent.viewer) # TODO: hide this not in the stereoshift dialog but in the top widget
+        self.parent.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers) # TOPO: Move to CalibrationManager?
 
         # Stereoshift related parameters
         self.stereoshift_info = StereoshiftInfo()
         self.stereoshift_info.name = "origin_vertex"
 
-    def _setup_stereoshift_layers(self):
-        # retrieve current camera position
-        from .analysis import TYPICAL_IMAGE_LONG_SIZE_PIX, TYPICAL_IMAGE_SHORT_SIZE_PIX
-        #origin_x = self.parent.camera_center[0]
-        #origin_y = self.parent.camera_center[1]
-        origin_x = 0.5 * TYPICAL_IMAGE_SHORT_SIZE_PIX # actually how far DOWN !!
-        spread_x = 0.15 * TYPICAL_IMAGE_SHORT_SIZE_PIX # actually vertical spread !!
-
-        point_origin_y = 0.25 * TYPICAL_IMAGE_LONG_SIZE_PIX # actually how far ACROSS !!
-        fid_origin_y = 0.5 * TYPICAL_IMAGE_LONG_SIZE_PIX
-        fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
-
-        #zoom_factor = self.parent.viewer.camera.zoom
-        zoom_factor = 0.05
-
-
-        sc = 100
-
-        # First position the point being measured:
-        labels = [ "point", ]
-        symbols = [ "disc", ]
-        colours = ["cyan", ]
-        types = ["point", ]
-        symbol_sizes = [1 * sc, ]
-        points_in_generic_view = [ [origin_x, point_origin_y, ], ]
-
-        # Now position the Front/Back fiducial pairs:
-        for i in range(self.num_front_back_fid_pairs):
-            labels += [ "", "", ]
-            types += ["front", "back", ]
-            symbols += ["x", "x",]
-            symbol_sizes += [4*sc, 1*sc,]
-            points_in_generic_view += [
-                [origin_x - spread_x, fid_origin_y + i * fid_step_y, ],
-                [origin_x + spread_x, fid_origin_y + i * fid_step_y, ],
-            ]
-            if i==0:
-                colours += [
-                    "#55ff00",  # front fiducial (light green)
-                    "#00aa00",  # back fiducial (dark green)
-                    ]
-            elif i==1:
-                colours += [
-                    "#ff5500",  # front fiducial (light red)
-                    "#aa0000",  # back fiducial (dark red)
-                ]
-            else:
-                colours += [
-                    "#5500ff",  # front fiducial (light blue)
-                    "#0000aa",  # back fiducial (dark blue)
-                ]
-
-        view_indices = (0, 1, 2)
-
-        name_of_view = [ f"Calibration workspace for view {v}" for v in view_indices ]
-
-        # Displace the generic points 100 to the left, or not at all, or 100 to the right, depending on view:
-        points_in_view = [
-            np.array([ np.array(point)+np.array([(v-1)*100, 0,]) for point in points_in_generic_view ])
-            for v in view_indices
-        ]
-
-        # If in debug mode can replace the points and labels with ones that are physically interesting.
-        # Don't give this option to the students!
-        debug_fiducial_mode = True
-
-        # The pre-made points assume 3 pairs of fiducials in each view, so:
-        if debug_fiducial_mode and self.num_front_back_fid_pairs == 3:
-            from .analysis import debug_points_view_0_calibration_layer
-            from .analysis import debug_points_view_1_calibration_layer
-            from .analysis import debug_points_view_2_calibration_layer
-            from .analysis import debug_point_labels_all_calibration_layers
-            points_in_view = [
-                debug_points_view_0_calibration_layer,
-                debug_points_view_1_calibration_layer,
-                debug_points_view_2_calibration_layer,
-            ] # overwrites old points_in_view
-            labels = debug_point_labels_all_calibration_layers
-
-        for v in view_indices:
-            print(f"Point in view {v} are {points_in_view[v]}")
-
-        """
-        text = {
-            "string": labels,
-            "size": 14,
-            "color": colors,
-            "translation": np.array([-30, 0]),
-        }
-        """
-
-        # create a points layer where the face_color is set by the good_point feature
-        # and the edge_color is set via a color map (grayscale) on the confidence
-        # feature.
-        # points_layer =
-        props = {'labels': labels, }
-
-        layers = [
-            self.parent.viewer.add_points(
-            points_in_view[v],
-            name=name_of_view[v],
-            #size=20,
-            size=symbol_sizes,
-            properties=props,
-            border_width=7,
-            border_width_is_relative=False,
-            border_color=colours,
-            face_color=colours,
-            symbol=symbols,
-            #out_of_slice_display=False,
-            ) for v in view_indices
-            ]
-
-        # set the edge_color mode to colormap
-        # points_layer.edge_color_mode = 'colormap'
-        for layer in layers:
-
-            layer.text = {
-                'string': labels,
-                'color': colours,
-                'size': 12,
-                'anchor': 'center',
-                'translation': np.array([-150, 0]), # move text 150 pixels up
-            }
-            layer.types = types
-
-            if self.point_menu_type == self.RIGHT_CLICK:
-                layer.mouse_drag_callbacks.append(self.on_mouse)
-            if self.point_menu_type == self.DOUBLE_CLICK:
-                layer.mouse_double_click_callbacks.clear() # want to disable double click zoom
-                layer.mouse_double_click_callbacks.append(self.on_mouse)
-
-        return layers
-
-    def rename_point(self, idx, name, type):
-        #print(f"Renaming point idx={idx} with name={name}")
-
-        other_idx = None # Default
-        other_name = None # Default
-        if type == "front":
-            other_idx = idx + 1 # we store front-then-back, so back is +1 on.
-            other_name = name[:-1] # all bar the last character (to remove prime)
-        if type == "back":
-            other_idx = idx - 1 # we store front-then-back, so front is -1 on.
-            other_name = name + "'"
-
-        for layer in self.cal_layers:
-            # print(f"before alteration {layer.text}")
-            layer.text.values[idx] = name
-            #print(f"after  alteration {layer.text}")
-            if other_idx is not None and other_name is not None:
-                layer.text.values[other_idx] = other_name
-
-            layer.refresh()
-
-    def on_mouse(self, layer, event):
-        print(f"Detected mouse event {event} on layer {layer}")
-        if (
-                self.point_menu_type == self.DOUBLE_CLICK or
-                self.point_menu_type == self.RIGHT_CLICK and event.button == 2
-            ):
-            coords = layer.world_to_data(event.position)
-            print(f"coords = {coords}")
-            ind = layer.get_value(coords, world=True)
-            print(f"ind is {ind}")
-            if ind is None:
-                return
-            i = ind
-
-            type = layer.types[i]
-
-            print(f" got 1 and type {type}")
-
-            def show_menu(type):
-                # build popup menu
-                menu = QMenu(self.parent.viewer.window._qt_window)
-
-                header = QAction("Set name", menu)
-                header.setEnabled(False)  # makes it unclickable
-                font = header.font()
-                font.setBold(True)
-                header.setFont(font)
-                menu.addAction(header)
-                menu.addSeparator()
-
-                # fixed_names = ["Alpha", "Beta", "Gamma"]
-                from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
-
-                if type == "front":
-                    fixed_names = list(FIDUCIAL_FRONT.keys())
-                elif type == "back":
-                    fixed_names = list(FIDUCIAL_BACK.keys())
-                else:
-                    fixed_names = ["point"]
-
-                # add fixed names
-                for fname in fixed_names:
-                    act = QAction(fname, menu)
-                    act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
-                    menu.addAction(act)
-
-                print(f" got 2 ")
-
-                # "no name" entry
-                noname = QAction("❌ Clear", menu)
-                noname.triggered.connect(lambda _: self.rename_point(i, "", type))
-                menu.addAction(noname)
-
-                print(f" got 3 ")
-
-                # custom name entry
-                def custom_name():
-                    print(f"In custom name")
-                    text, ok = QInputDialog.getText(
-                        self.parent.viewer.window._qt_window,
-                        "Custom name",
-                        "Enter name:",
-                    )
-                    if ok and text.strip():
-                        self.rename_point(i, text.strip(), type)
-
-                print(f" got 4 ")
-
-                menu.addSeparator()
-                custom = QAction("Custom name ...", menu)
-                custom.triggered.connect(custom_name)
-                menu.addAction(custom)
-
-                print(f" got 5 ")
-
-                # popup at cursor position
-                menu.exec_(pos) # use captured global cursor pos -- see (*) below
-
-            print(" got 6 ")
-
-            # capture cursor now
-            pos = QCursor.pos() # (*)
-
-            """
-            We can't just all show_menu() in the next line as it 
-            results in our capuring the right click by hiding the 
-            right mouse button RELEASE.
-            """
-            QTimer.singleShot(100, lambda : show_menu(type) )
-
-            print(f" got 7 ")
-
-
     # Callback for when the 'View' slider changes
     def _callback_that_activates_calibration_layers(self, event):
-        self._activate_calibration_layers()
+        self.calibration_manager._activate_calibration_layers()
 
     def _on_click_vertex(self) -> None:
         """When vertex is selected, update the name of the vertex"""
@@ -463,26 +209,11 @@ class StereoshiftDialog(QDialog):
                 + str(selected_row)
             )
 
-    def _deactivate_calibration_layers(self):
-        """On cancel suppress the points_Stereoshift layer"""
-        for layer in self.cal_layers:
-            layer.visible = False
-            # self.parent._deactivate_calibration_layer(layer)
-
-    def _activate_calibration_layers(self):
-        current_view = self.parent.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are x and y
-
-        for i, layer in enumerate(self.cal_layers):
-            if i == current_view:
-                self.parent.viewer.layers.selection.active = layer
-                print("Turn off this line to stop the autolayer change!!")
-
-            layer.visible = (i == current_view)
 
     def show(self) -> None:
-        self._activate_calibration_layers()
+        self.calibration_manager._activate_calibration_layers()
         return super().show()
 
     def reject(self) -> None:
-        self._deactivate_calibration_layers()
+        self.calibration_manager._deactivate_calibration_layers()
         return super().reject()
