@@ -3,6 +3,6 @@ try:
 except ImportError:
     __version__ = "unknown"
 
-from ._main_widget import ParticleTracksWidget
+from ._main_widget import ParticleTracksWidget, get_singleton
 
-__all__ = ("ParticleTracksWidget",)
+__all__ = ("ParticleTracksWidget","get_singleton")

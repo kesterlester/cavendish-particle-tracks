@@ -39,6 +39,16 @@ from .analysis import EXPECTED_PARTICLES, VIEW_NAMES, ParticleDecay
 MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
 IMAGE_LAYER_NAME = "Bubble Chamber Data"
 
+_singleton_instance = None
+
+def get_singleton(viewer=None, docking_area: str = "right", data_folder=None):
+    """Return the singleton ParticleTracksWidget, creating it if necessary."""
+    global _singleton_instance
+    if _singleton_instance is None:
+        _singleton_instance = ParticleTracksWidget(
+            viewer, docking_area=docking_area, data_folder=data_folder
+        )
+    return _singleton_instance
 
 class ParticleTracksWidget(QWidget):
     """Widget containing a simple table of points and track radii per image."""
