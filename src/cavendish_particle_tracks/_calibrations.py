@@ -93,6 +93,7 @@ class CalibrationManager:
         # TODO: Try to avoid re-storing this redundant list of generic calibration layers?
         self.generic_calibration_layers = self._setup_stereoshift_layers() # Returns a list of napari point layers.
         self.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers)
+        self._deactivate_calibration_layers()
 
     def _calibration_layers(self):
         # A simple python list of napari points layers.
