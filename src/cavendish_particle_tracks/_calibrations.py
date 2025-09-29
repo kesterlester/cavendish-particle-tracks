@@ -335,7 +335,8 @@ class CalibrationManager:
         # Tell Napari about the generic calibration layers, deleting any old ones if necessary.
         for layer in layers:
             if layer.name in self.viewer.layers:
-                pass #del self.viewer.layers[layer.name]
+                #TODO: Fix LOAD: some kind of layer deletion or augmentation is needed, but does not work currently.
+                pass #del self.viewer.layers[layer.name].
             self.viewer.add_layer(layer)
 
         # Setup other things for each layer that are not saved in the CSV:
