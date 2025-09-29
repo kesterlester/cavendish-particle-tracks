@@ -203,8 +203,14 @@ class MagnificationDialog(QDialog):
         napari.utils.notifications.show_info("Magnification parameters updated.")
         return super().accept()
 
+
+    def show(self) -> None:
+        self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(True, True)
+        return super().show()
+
     def reject(self) -> None:
         """On reject remove the magnification layer"""
 
+        self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(False, False)
         self.parent._deactivate_calibration_layer(self.magnification_layer)
         return super().reject()
