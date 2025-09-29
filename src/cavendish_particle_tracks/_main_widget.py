@@ -34,6 +34,7 @@ from ._decay_angles_dialog import DecayAnglesDialog
 from ._magnification_dialog import MagnificationDialog
 from ._settings import get_bypass, get_shuffling_seed
 from ._stereoshift_dialog import StereoshiftDialog
+from ._calibrations import CalibrationManager
 from .analysis import EXPECTED_PARTICLES, VIEW_NAMES, ParticleDecay
 
 MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
@@ -176,6 +177,8 @@ class ParticleTracksWidget(QWidget):
 
         if data_folder is not None:
             self._load_data_from(data_folder)
+
+        self.calibration_manager = CalibrationManager(self.viewer)
 
     def hideEvent(self, event):
         """When the widget is 'closed' (napari just hides it), show the layer buttons again.

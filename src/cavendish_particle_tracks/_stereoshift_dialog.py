@@ -21,7 +21,6 @@ from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
 
 from ._calculate import depth, length, stereoshift
 from .analysis import Fiducial, StereoshiftInfo
-from ._calibrations import CalibrationManager
 
 if TYPE_CHECKING:
     from ._main_widget import ParticleTracksWidget
@@ -113,9 +112,6 @@ class StereoshiftDialog(QDialog):
         self.layout().addWidget(bap, 14, 0, 1, 3)
         self.layout().addWidget(self.buttonBox, 15, 0, 1, 3)
 
-        # Setup points layer
-        self.calibration_manager = CalibrationManager(self.parent.viewer) # TODO: hide this not in the stereoshift dialog but in the top widget
-
         # Stereoshift related parameters
         self.stereoshift_info = StereoshiftInfo()
         self.stereoshift_info.name = "origin_vertex"
@@ -205,9 +201,9 @@ class StereoshiftDialog(QDialog):
 
 
     def show(self) -> None:
-        self.calibration_manager._activate_calibration_layers()
+        self.parent.calibration_manager._activate_calibration_layers()
         return super().show()
 
     def reject(self) -> None:
-        self.calibration_manager._deactivate_calibration_layers()
+        self.parent.calibration_manager._deactivate_calibration_layers()
         return super().reject()
