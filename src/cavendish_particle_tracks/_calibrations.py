@@ -53,6 +53,26 @@ def overwrite_layer(A, B):
         "size", "symbol", "edge_width", "opacity", "blending",
         "visible", "scale", "translate", "rotate"
     }
+
+    SETTABLE_KEYS = {
+        # core
+        "name", "metadata", "properties", "size", "symbol",
+        "border_width", "border_width_is_relative",
+        "face_color", "border_color",
+        "opacity", "blending", "visible",
+        "scale", "translate", "rotate", "shear", "affine",
+        "projection_mode", "units",
+
+        # optional but safe to include for full fidelity
+        "axis_labels", "experimental_clipping_planes",
+        "face_color_cycle", "face_colormap", "face_contrast_limits",
+        "border_color_cycle", "border_colormap", "border_contrast_limits",
+        "text", "out_of_slice_display", "n_dimensional",
+        "features", "feature_defaults",
+        "shading", "antialiasing", "canvas_size_limits", "shown",
+    }
+
+    print(f"Meta is {meta}")
     for k in SETTABLE_KEYS:
         if k in meta:
             setattr(A, k, deepcopy(meta[k]))
@@ -327,7 +347,7 @@ class CalibrationManager:
             'symbols': symbols,
             'symbol_sizes': symbol_sizes,
         }
-        return napari.layers.Points(
+        layer = napari.layers.Points(
             points,
             name=names_of_generic_calibration_layers[view_index],
             # size=20,
@@ -340,6 +360,14 @@ class CalibrationManager:
             symbol=symbols,
             # out_of_slice_display=False,
         )
+        layer.text = {
+            'string': labels,
+            'color': colours,
+            'size': 12,
+            'anchor': 'center',
+            'translation': np.array([-150, 0]),  # move text 150 pixels up
+        }
+        return layer
 
     def _setup_stereoshift_layers(self, read_from_file=False):
 
@@ -353,23 +381,12 @@ class CalibrationManager:
             if layer.name in self.viewer.layers:
                 # Existing layer, so callbacks already exist too, so just overwrite old layer data:
                 overwrite_layer(self.viewer.layers[layer.name], layer)
+                print("\n\n DURING REPLACEMENT \n\n")
             else:
                 # New layer!
                 self.viewer.add_layer(layer)
                 # Attach callbacks as new layer:
                 layer.mouse_drag_callbacks.append(self.on_mouse)
-
-            # Tweak the text:
-
-            labels = [str(l) for l in layer.properties["labels"]]  # deep copy
-            colours = [str(c) for c in layer.properties["colours"]]  # deep copy
-
-            layer.text = {
-                'string': labels,
-                'color': colours,
-                'size': 12,
-                'anchor': 'center',
-                'translation': np.array([-150, 0]),  # move text 150 pixels up
-            }
+                print("\n\n DURING original \n\n")
 
         return layers
