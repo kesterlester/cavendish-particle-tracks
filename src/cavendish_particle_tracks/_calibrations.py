@@ -56,7 +56,7 @@ def overwrite_layer(A, B):
         "name", "metadata", "properties", "face_color", "edge_color",
         "size", "symbol", "edge_width", "opacity", "blending",
         "visible", "scale", "translate", "rotate"
-    }
+    } # Original list.
 
     SETTABLE_KEYS = {
         # core
@@ -76,7 +76,6 @@ def overwrite_layer(A, B):
         "shading", "antialiasing", "canvas_size_limits", "shown",
     }
 
-    print(f"Meta is {meta}")
     for k in SETTABLE_KEYS:
         if k in meta:
             setattr(A, k, deepcopy(meta[k]))
@@ -97,7 +96,7 @@ class CalibrationManager:
         self.viewer = viewer
 
         # TODO: Try to avoid re-storing this redundant list of generic calibration layers .... should to live only in viewer?
-        self._generic_calibration_layers = self._setup_stereoshift_layers()  # Returns a list of napari point layers.
+        self._generic_calibration_layers = self._setup_calibration_layers()  # Returns a list of napari point layers.
 
         # Make sure we are only shown when commanded!
         # We can only do this once we can call self.generic_calibration_layers()
@@ -416,7 +415,7 @@ class CalibrationManager:
         }
         return layer
 
-    def _setup_stereoshift_layers(self, read_from_file=False):
+    def _setup_calibration_layers(self, read_from_file=False):
 
         if read_from_file:
             layers = self._get_generic_calibration_layers_from_file()
