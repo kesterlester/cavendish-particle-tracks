@@ -115,15 +115,10 @@ class StereoshiftDialog(QDialog):
 
         # Setup points layer
         self.calibration_manager = CalibrationManager(self.parent.viewer) # TODO: hide this not in the stereoshift dialog but in the top widget
-        self.parent.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers) # TOPO: Move to CalibrationManager?
 
         # Stereoshift related parameters
         self.stereoshift_info = StereoshiftInfo()
         self.stereoshift_info.name = "origin_vertex"
-
-    # Callback for when the 'View' slider changes
-    def _callback_that_activates_calibration_layers(self, event):
-        self.calibration_manager._activate_calibration_layers()
 
     def _on_click_vertex(self) -> None:
         """When vertex is selected, update the name of the vertex"""

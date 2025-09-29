@@ -90,7 +90,9 @@ class CalibrationManager:
 
     def __init__(self, viewer):
         self.viewer = viewer
-        self.generic_calibration_layers = self._setup_stereoshift_layers() # Retrurns a list of napari point layers.
+        # TODO: Try to avoid re-storing this redundant list of generic calibration layers?
+        self.generic_calibration_layers = self._setup_stereoshift_layers() # Returns a list of napari point layers.
+        self.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers)
 
     def _calibration_layers(self):
         # A simple python list of napari points layers.
@@ -100,12 +102,18 @@ class CalibrationManager:
         for i, layer in enumerate(self.generic_calibration_layers):
             layer.save(self.filename_for_generic_calibration_layer(i)) # saves to csv file
 
-    def _deactivate_calibration_layers(self):  # Move to CalibrationManager??
+    # Callback for when the 'View' slider changes:
+    def _callback_that_activates_calibration_layers(self, event):
+        self._activate_calibration_layers()
+
+    # Make all the calibration layers invisible:
+    def _deactivate_calibration_layers(self):
         """On cancel suppress the points_Stereoshift layer"""
         for layer in self.generic_calibration_layers:
             layer.visible = False
 
-    def _activate_calibration_layers(self): # Move to CalibrationManager??
+    # Make the correct calibration layers visible/invisible based on the view slider:
+    def _activate_calibration_layers(self):
         current_view = self.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are x and y
 
         for i, layer in enumerate(self.generic_calibration_layers):
