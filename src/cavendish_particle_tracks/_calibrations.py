@@ -40,6 +40,22 @@ dialog ... so the above may change.
 view_indices = (0, 1, 2)
 names_of_generic_calibration_layers = [f"Calibration workspace for view {v}" for v in view_indices]
 
+from copy import deepcopy
+def overwrite_layer(A, B):
+    if type(A) is not type(B):
+        raise TypeError("Layer types must match")
+
+    data, meta, _ = B.as_layer_data_tuple()
+    A.data = deepcopy(data)
+
+    SETTABLE_KEYS = {
+        "name", "metadata", "properties", "face_color", "edge_color",
+        "size", "symbol", "edge_width", "opacity", "blending",
+        "visible", "scale", "translate", "rotate"
+    }
+    for k in SETTABLE_KEYS:
+        if k in meta:
+            setattr(A, k, deepcopy(meta[k]))
 
 class CalibrationManager:
     """
@@ -335,24 +351,25 @@ class CalibrationManager:
         # Tell Napari about the generic calibration layers, deleting any old ones if necessary.
         for layer in layers:
             if layer.name in self.viewer.layers:
-                #TODO: Fix LOAD: some kind of layer deletion or augmentation is needed, but does not work currently.
-                pass #del self.viewer.layers[layer.name].
-            self.viewer.add_layer(layer)
+                # Existing layer, so callbacks already exist too, so just overwrite old layer data:
+                overwrite_layer(self.viewer.layers[layer.name], layer)
+            else:
+                # New layer!
+                self.viewer.add_layer(layer)
+                # Attach callbacks as new layer:
+                layer.mouse_drag_callbacks.append(self.on_mouse)
 
-        # Setup other things for each layer that are not saved in the CSV:
+            # Tweak the text:
 
-        for layer in layers:
-            labels = [ str(l) for l in layer.properties["labels"] ] # deep copy
-            colours = [ str(c) for c in  layer.properties["colours"] ] # deep copy
+            labels = [str(l) for l in layer.properties["labels"]]  # deep copy
+            colours = [str(c) for c in layer.properties["colours"]]  # deep copy
 
             layer.text = {
                 'string': labels,
                 'color': colours,
                 'size': 12,
                 'anchor': 'center',
-                'translation': np.array([-150, 0]), # move text 150 pixels up
+                'translation': np.array([-150, 0]),  # move text 150 pixels up
             }
-
-            layer.mouse_drag_callbacks.append(self.on_mouse)
 
         return layers
