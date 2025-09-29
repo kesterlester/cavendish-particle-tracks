@@ -114,7 +114,6 @@ class StereoshiftDialog(QDialog):
         self.layout().addWidget(self.buttonBox, 15, 0, 1, 3)
 
         # Setup points layer
-        #self.generic_calibration_layers = self._setup_stereoshift_layers()
         self.calibration_manager = CalibrationManager(self.parent.viewer) # TODO: hide this not in the stereoshift dialog but in the top widget
         self.parent.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers) # TOPO: Move to CalibrationManager?
 
