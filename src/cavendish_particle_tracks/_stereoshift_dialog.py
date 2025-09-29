@@ -21,18 +21,20 @@ from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
 
 from ._calculate import depth, length, stereoshift
 from .analysis import Fiducial, StereoshiftInfo
+from .non_overlapping_dialog import NonOverlappingQDialog
 
 if TYPE_CHECKING:
     from ._main_widget import ParticleTracksWidget
 
 
-class StereoshiftDialog(QDialog):
+class StereoshiftDialog(NonOverlappingQDialog):  # was QDialog
     def __init__(self, parent: "ParticleTracksWidget"):
-        super().__init__(parent)
+        # super().__init__(parent)
+        # self.setWindowTitle("Stereoshift")
+        super().__init__(tokens=["controls_calibration_layers"], parent=parent, title="Stereoshift")
 
         self.parent = parent
 
-        self.setWindowTitle("Stereoshift")
 
         # drop-down lists of vertex
         self.vertex_combobox = QComboBox()
@@ -199,8 +201,12 @@ class StereoshiftDialog(QDialog):
                 + str(selected_row)
             )
 
+    def open(self) -> None:
+        print("in OPEN")
+        return super().open()
 
     def show(self) -> None:
+        print("in SHOW")
         self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(True, False)
         return super().show()
 

@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
 )
 
 from ._calculate import magnification
+from .non_overlapping_dialog import NonOverlappingQDialog
 from .analysis import (
     FIDUCIAL_BACK,
     FIDUCIAL_FRONT,
@@ -28,11 +29,13 @@ if TYPE_CHECKING:
 MAGNIFICATION_LAYER_NAME = "Magnification"
 
 
-class MagnificationDialog(QDialog):
+class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
     def __init__(self, parent):
-        super().__init__(parent)  # Call QDialog constructor
+        # super().__init__(parent)  # Call QDialog constructor
+        # self.setWindowTitle("Magnification")
+
+        super().__init__(tokens=["controls_calibration_layers"], parent=parent, title="Magnification")
         self.parent: ParticleTracksWidget = parent
-        self.setWindowTitle("Magnification")
 
         self.f1 = Fiducial()
         self.f2 = Fiducial()
