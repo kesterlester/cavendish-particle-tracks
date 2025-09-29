@@ -30,7 +30,11 @@ One can currently debug the calibration manager from within the napari console a
 opening stereoshift_dialog with:
 
 import cavendish_particle_tracks as cpt
-cm = cpt.get_singleton().stereoshift_dlg.calibration_manager
+cm = cpt.get_singleton().calibration_manager
+cm._setup_stereoshift_layers(read_from_file=True)
+
+import cavendish_particle_tracks as cpt
+cm = cpt.get_singleton().calibration_manager
 cm.save_calibration()
 
 Note that it will likely move into the main wiget rather than be held by the stereo
@@ -89,40 +93,73 @@ class CalibrationManager:
     num_generic_front_back_fid_pairs = 3
 
     def __init__(self, viewer):
-        self.viewer = viewer
-        # TODO: Try to avoid re-storing this redundant list of generic calibration layers?
-        self.generic_calibration_layers = self._setup_stereoshift_layers() # Returns a list of napari point layers.
-        self.viewer.dims.events.current_step.connect(self._callback_that_activates_calibration_layers)
-        self._deactivate_calibration_layers()
 
-    def _calibration_layers(self):
+        self.viewer = viewer
+
+        # TODO: Try to avoid re-storing this redundant list of generic calibration layers .... should to live only in viewer?
+        self._generic_calibration_layers = self._setup_stereoshift_layers()  # Returns a list of napari point layers.
+
+        # Make sure we are only shown when commanded!
+        # We can only do this once we can call self.generic_calibration_layers()
+        assert hasattr(self, "_generic_calibration_layers")
+        self.set_calibration_layer_visibility_and_focus(False, False)
+
+        # Lastly, setup callbacks:
+        self._setup_callbacks()
+
+    def _setup_callbacks(self):
+        for layer in self.generic_calibration_layers():
+            # This is the callback to allow right-click on generic fiducials:
+            layer.mouse_drag_callbacks.append(self.on_mouse)
+
+        # This is the thing that changes which fiducials are visible when the view slider is slid:
+        self.viewer.dims.events.current_step.connect(self.callback_calibration_layer_visibility)
+
+    def generic_calibration_layers(self):
+        return self._generic_calibration_layers
+
+    def all_calibration_layers(self):
         # A simple python list of napari points layers.
-        return self.generic_calibration_layers  # Later will add  [ self.specific_calibration_layer ]
+        return self.generic_calibration_layers()  # Later might add  [ self.specific_calibration_layer ]
 
     def save_calibration(self):
-        for i, layer in enumerate(self.generic_calibration_layers):
+        for i, layer in enumerate(self.generic_calibration_layers()):
             layer.save(self.filename_for_generic_calibration_layer(i)) # saves to csv file
 
     # Callback for when the 'View' slider changes:
-    def _callback_that_activates_calibration_layers(self, event):
-        self._activate_calibration_layers()
+    def callback_calibration_layer_visibility(self, event):
+        self._refresh_visibility_and_focus_of_calibration_layers()
 
-    # Make all the calibration layers invisible:
-    def _deactivate_calibration_layers(self):
-        """On cancel suppress the points_Stereoshift layer"""
-        for layer in self.generic_calibration_layers:
+    # Show or hide calibration layers
+    def set_calibration_layer_visibility_and_focus(self, visbility: bool, focus: bool):
+        # visibility=True means that the correct view will be rendered and the others hidden, otherwise none will be shown.
+        # focus=True means that when the relevant view is made visible, it will also be given focus.
+        self._calibration_layer_visibility = visbility
+        self._calibration_layer_focus = focus
+        self._refresh_visibility_and_focus_of_calibration_layers()
+
+    # Private method to Make all the calibration layers invisible:
+    def _hide_calibration_layers(self):
+        for layer in self.generic_calibration_layers():
             layer.visible = False
 
     # Make the correct calibration layers visible/invisible based on the view slider:
-    def _activate_calibration_layers(self):
+    def _show_and_activate_correct_calibration_layer(self):
         current_view = self.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are x and y
 
-        for i, layer in enumerate(self.generic_calibration_layers):
-            if i == current_view:
+        for i, layer in enumerate(self.generic_calibration_layers()):
+            # Make the current view active if so requested:
+            if self._calibration_layer_focus and i == current_view:
                 self.viewer.layers.selection.active = layer
-                print("Turn off this line to stop the autolayer change!!")
 
+            # Make the relevant views visible or invisible:
             layer.visible = (i == current_view)
+
+    def _refresh_visibility_and_focus_of_calibration_layers(self):
+        if self._calibration_layer_visibility:
+            self._show_and_activate_correct_calibration_layer()
+        else:
+            self._hide_calibration_layers()
 
     def rename_point(self, idx, name, type):
         # print(f"Renaming point idx={idx} with name={name}")
@@ -136,7 +173,7 @@ class CalibrationManager:
             other_idx = idx - 1  # we store front-then-back, so front is -1 on.
             other_name = name + "'"
 
-        for layer in self.generic_calibration_layers:
+        for layer in self.generic_calibration_layers():
             # print(f"before alteration {layer.text}")
             layer.text.values[idx] = name
             # print(f"after  alteration {layer.text}")
@@ -368,6 +405,7 @@ class CalibrationManager:
             face_color=colours,
             symbol=symbols,
             # out_of_slice_display=False,
+            visible=False,
         )
         layer.text = {
             'string': labels,
@@ -394,8 +432,6 @@ class CalibrationManager:
             else:
                 # New layer!
                 self.viewer.add_layer(layer)
-                # Attach callbacks as new layer:
-                layer.mouse_drag_callbacks.append(self.on_mouse)
                 print("\n\n DURING original \n\n")
 
         return layers

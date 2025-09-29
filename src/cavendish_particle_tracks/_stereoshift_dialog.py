@@ -201,9 +201,9 @@ class StereoshiftDialog(QDialog):
 
 
     def show(self) -> None:
-        self.parent.calibration_manager._activate_calibration_layers()
+        self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(True, True)
         return super().show()
 
     def reject(self) -> None:
-        self.parent.calibration_manager._deactivate_calibration_layers()
+        self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(False, False)
         return super().reject()
