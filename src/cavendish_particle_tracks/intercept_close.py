@@ -67,7 +67,8 @@ class _CloseInterceptor(QObject):
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Close:
             if getattr(self.plugin, "has_unsaved_data", lambda: False)():
-                reply = QMessageBox.question(
+                
+                reply = QMessageBox.warning(
                     obj,
                     "Unsaved data",
                     "Discard unsaved changes?",
