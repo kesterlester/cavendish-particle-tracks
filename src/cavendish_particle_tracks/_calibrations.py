@@ -161,6 +161,8 @@ class CalibrationManager:
 
     def on_mouse(self, layer, event):
         print(f"Detected mouse event {event} on layer {layer}")
+        print(f"WAS mouse button {event.button} on layer {layer}")
+
         if event.button == 2:
             coords = layer.world_to_data(event.position)
             print(f"coords = {coords}")
