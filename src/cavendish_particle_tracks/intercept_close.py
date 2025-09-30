@@ -59,10 +59,9 @@ class _CloseInterceptor(QObject):
     def eventFilter(self, obj, event):
 
         if event.type() == QEvent.Close:
-            if getattr(self.plugin, "has_unsaved_data"):
-                print("EF has has_unsaved_data")
-            else:
-                print("EF lacks has_unsaved_data")
+            if not getattr(self.plugin, "has_unsaved_data"):
+                print("Warning!  Did your plugin forget to implement the has_unsaved_data method needed by the CLoseInterceptor?")
+            
             if getattr(self.plugin, "has_unsaved_data", lambda: False)():
 
                 reply = QMessageBox.warning(
