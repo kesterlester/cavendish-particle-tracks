@@ -408,13 +408,7 @@ class CalibrationManager:
                 print("\n\n NOTING NEW LAYER \n\n")
 
         # Tell Napari about any new generic calibration layers:
-        if new_layers:
-            add_as_group = False
-            if add_as_group:
-                pass
-            else:
-                # add individually
-                for new_layer in new_layers:
-                    self.viewer.add_layer(new_layer)
+        for new_layer in new_layers:
+            self.viewer.add_layer(new_layer)
 
         return new_layers
