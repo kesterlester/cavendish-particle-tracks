@@ -182,40 +182,6 @@ class ParticleTracksWidget(QWidget):
 
         self.calibration_manager = CalibrationManager(self.viewer)
 
-    def closeEvent(self, event):
-        print("GOT CLOSE EVENT in main widget")
-        super().closeEvent()
-
-    def hideEvent(self, event):
-        print("GOT HIDE EVENT in main widget")
-
-        """When the widget is 'closed' (napari just hides it), show the layer buttons again.
-        If data has been recorded, prompt the user to save it before closing the widget.
-        """
-        if len(self.data) > 0:
-            self._confirm_save_before_closing()
-
-        with warnings.catch_warnings():
-            warnings.simplefilter(action="ignore", category=FutureWarning)
-            self.viewer.window._qt_viewer.layerButtons.show()
-            self.viewer.window._qt_viewer.viewerButtons.show()
-        super().hideEvent(event)
-
-    def _confirm_save_before_closing(self):
-        """Prompt the user to save data before closing the widget."""
-        message_box = QMessageBox(self)
-        message_box.setIcon(QMessageBox.Warning)
-        message_box.setText(
-            "Closing Cavendish Particle Tracks. Any unsaved data will be lost."
-        )
-        message_box.setInformativeText("Do you want to save your data?")
-        message_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        message_box.setDefaultButton(QMessageBox.Yes)
-        reply = message_box.exec()
-
-        if reply == QMessageBox.Yes:
-            self._on_click_save()
-
     @property
     def camera_center(self):
         # update for 4d implementation as appropriate.
