@@ -35,6 +35,7 @@ from ._magnification_dialog import MagnificationDialog
 from ._settings import get_bypass, get_shuffling_seed
 from ._stereoshift_dialog import StereoshiftDialog
 from ._calibrations import CalibrationManager
+from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PARTICLES, VIEW_NAMES, ParticleDecay
 
 MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
@@ -51,6 +52,7 @@ def get_singleton(viewer=None, docking_area: str = "bottom", data_folder=None):
         )
     return _singleton_instance
 
+@InterceptClose
 class ParticleTracksWidget(QWidget):
     """Widget containing a simple table of points and track radii per image."""
 

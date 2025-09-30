@@ -70,15 +70,17 @@ class _CloseInterceptor(QObject):
                 reply = QMessageBox.question(
                     obj,
                     "Unsaved data",
-                    "Do you want to save your unsaved data first?",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                    "Discard unsaved changes?",
+                    QMessageBox.Discard | QMessageBox.Cancel,
                     QMessageBox.Cancel,
                 )
                 if reply == QMessageBox.Cancel:
                     event.ignore()
                     return True
                 elif reply == QMessageBox.Yes:
-                    self.plugin.save_data()
+                    pass
+                    # Could instead do some plugin action, like
+                    # self.plugin.save_data()
         return super().eventFilter(obj, event)
 
 
