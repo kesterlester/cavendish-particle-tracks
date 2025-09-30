@@ -67,7 +67,7 @@ class _CloseInterceptor(QObject):
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Close:
             if getattr(self.plugin, "has_unsaved_data", lambda: False)():
-                
+
                 reply = QMessageBox.warning(
                     obj,
                     "Unsaved data",
@@ -77,11 +77,11 @@ class _CloseInterceptor(QObject):
                 )
                 if reply == QMessageBox.Cancel:
                     event.ignore()
-                    return True
-                elif reply == QMessageBox.Yes:
-                    pass
-                    # Could instead do some plugin action, like
-                    # self.plugin.save_data()
+                    return True # Also says event should be ignored.  See https://doc.qt.io/archives/qt-5.15/qobject.html#eventFilter
+                # elif reply == QMessageBox.No:
+                # Could instead do some plugin action, like
+                # self.plugin.save_data()
+
         return super().eventFilter(obj, event)
 
 
