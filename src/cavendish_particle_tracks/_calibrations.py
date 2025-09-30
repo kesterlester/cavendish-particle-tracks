@@ -15,6 +15,8 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtGui import QCursor, QMouseEvent
 from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
+from .napari_tools import make_move_only, overwrite_layer
+
 """
 Calibration points (locations of fiducials) come in two types:
 
@@ -44,41 +46,6 @@ dialog ... so the above may change.
 view_indices = (0, 1, 2)
 names_of_generic_calibration_layers = [f"Calibration workspace for view {v}" for v in view_indices]
 
-from copy import deepcopy
-def overwrite_layer(A, B):
-    if type(A) is not type(B):
-        raise TypeError("Layer types must match")
-
-    data, meta, _ = B.as_layer_data_tuple()
-    A.data = deepcopy(data)
-
-    SETTABLE_KEYS = {
-        "name", "metadata", "properties", "face_color", "edge_color",
-        "size", "symbol", "edge_width", "opacity", "blending",
-        "visible", "scale", "translate", "rotate"
-    } # Original list.
-
-    SETTABLE_KEYS = {
-        # core
-        "name", "metadata", "properties", "size", "symbol",
-        "border_width", "border_width_is_relative",
-        "face_color", "border_color",
-        "opacity", "blending", "visible",
-        "scale", "translate", "rotate", "shear", "affine",
-        "projection_mode", "units",
-
-        # optional but safe to include for full fidelity
-        "axis_labels", "experimental_clipping_planes",
-        "face_color_cycle", "face_colormap", "face_contrast_limits",
-        "border_color_cycle", "border_colormap", "border_contrast_limits",
-        "text", "out_of_slice_display", "n_dimensional",
-        "features", "feature_defaults",
-        "shading", "antialiasing", "canvas_size_limits", "shown",
-    }
-
-    for k in SETTABLE_KEYS:
-        if k in meta:
-            setattr(A, k, deepcopy(meta[k]))
 
 class CalibrationManager:
     """
@@ -110,6 +77,7 @@ class CalibrationManager:
         for layer in self.generic_calibration_layers():
             # This is the callback to allow right-click on generic fiducials:
             layer.mouse_drag_callbacks.append(self.on_mouse)
+            make_move_only(layer)
 
         # This is the thing that changes which fiducials are visible when the view slider is slid:
         self.viewer.dims.events.current_step.connect(self.callback_calibration_layer_visibility)
