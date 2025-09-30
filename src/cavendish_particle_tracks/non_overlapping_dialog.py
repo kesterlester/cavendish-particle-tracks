@@ -37,30 +37,36 @@ class NonOverlappingQDialog(QDialog):
 
     def _exit_without_calling_super(self):
         # check for conflicts before showing
+        if self._registered:
+            # No issue. We are already registered. So safe to show, and exist without re-registering.
+            return False
+
         conflicts = []
         for token in self._tokens:
             if token in NonOverlappingQDialog._token_registry:
                 conflicts.append(NonOverlappingQDialog._token_registry[token])
 
         if conflicts:
-            conflicting_window_titles = [d.windowTitle() for d in conflicts]
-            we_conflict_with_ourself = self.windowTitle() in conflicting_window_titles
+            conflicting_window_titles = set([d.windowTitle() for d in conflicts])
+            set_just_us = {self.windowTitle()}
+            we_only_conflict_with_ourself = set_just_us == conflicting_window_titles
 
-            if we_conflict_with_ourself:
-                QMessageBox.warning(
-                    self,
-                    "Conflict",
-                    f"The '{self.windowTitle()}' "
-                    f"window is already open."
-                )
+            if we_only_conflict_with_ourself:
+                # We should not have got here as we ought to have exited fie self._registered == True
+                assert False
+
             else:
-                names = ", ".join(conflicting_window_titles)
+                # If here we must conflict with another window:
+                conflicting_other_window_titles = conflicting_window_titles - set_just_us
+
+                names = ", ".join(conflicting_other_window_titles)
+                is_are = "is" if len(conflicting_other_window_titles)==1 else "are"
                 QMessageBox.warning(
-                    self,
-                    "Conflict",
-                    f"Can't open dialog '{self.windowTitle()}' "
-                    f"until {names} is closed."
-                )
+                        self,
+                        "Conflict",
+                        f"Can't open dialog '{self.windowTitle()}' "
+                        f"until {names} " + is_are + " closed."
+                    )
 
             return True
             """ 
@@ -84,16 +90,23 @@ class NonOverlappingQDialog(QDialog):
         return False
 
     def show(self) -> None:
+        print("SHOW INTERCEPTED")
         if self._exit_without_calling_super():
             return
         super().show()
 
     def open(self) -> None:
+        print("OPEN INTERCEPTED")
         if self._exit_without_calling_super():
             return
         super().open()
 
+    def hideEvent(selfs, event):
+        print("HIDE INTERCEPTED")
+        super().hideEvent(event)
+
     def closeEvent(self, event):
+        print("CLOSE INTERCEPTED")
         # clean up registry when dialog closes
         if self._registered:
             for token in self._tokens:

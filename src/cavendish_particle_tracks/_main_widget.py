@@ -484,6 +484,7 @@ class ParticleTracksWidget(QWidget):
             return self.decay_angles_dlg
         self.decay_angles_dlg = DecayAnglesDialog(self)
         self.decay_angles_dlg.show()
+        self.decay_angles_dlg.raise_()
         return self.decay_angles_dlg
 
     def _on_click_stereoshift(self) -> StereoshiftDialog:
@@ -495,6 +496,7 @@ class ParticleTracksWidget(QWidget):
             return self.stereoshift_dlg
         self.stereoshift_dlg = StereoshiftDialog(self)
         self.stereoshift_dlg.show()
+        self.stereoshift_dlg.raise_()
         return self.stereoshift_dlg
 
     def _on_click_load_data(self) -> None:
@@ -691,6 +693,7 @@ class ParticleTracksWidget(QWidget):
             return self.mag_dlg
         self.mag_dlg = MagnificationDialog(self)
         self.mag_dlg.show()
+        self.mag_dlg.raise_()
         return self.mag_dlg
 
     def _propagate_magnification(self, a: float, b: float) -> None:
