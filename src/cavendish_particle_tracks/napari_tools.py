@@ -72,7 +72,7 @@ def make_move_only(layer: napari.layers.Points) -> None:
 
     @at_most_once_per(3) # seconds
     def explain_veto(layer, show_dialog=True):
-        print("Add mode disabled on {layer.name}")
+        print(f"Showing GUI warning for add mode disabled on {layer.name}")
         if show_dialog:
             mes = QMessageBox()
             mes.setText(f"Adding or deleting points is not possible on the move-only layer '{layer.name}'.")
@@ -97,8 +97,11 @@ def make_move_only(layer: napari.layers.Points) -> None:
     def lock_mode(event):
         print(f"LM saw mode {layer.mode}")
         if layer.mode in vetoed_modes:
+            print(f"LM vetoing")
             layer.mode = default_mode # it would be nicer to go back to previous mode, but don't know what it was.
             explain_veto(layer)
+        else:
+            print(f"LM not vetoing")
 
     layer.events.mode.connect(lock_mode)
 
@@ -107,8 +110,8 @@ def make_move_only(layer: napari.layers.Points) -> None:
     @layer.bind_key('Delete') # point deletion
     @layer.bind_key('A') # add mode
     def prevent(layer):
-        print(f"veto delete/add")
-        explain_veto(layer, show_dialog=False)
+        print(f"BIND_KEY veto delete/add")
+        explain_veto(layer, show_dialog=True)
 
     return layer
 
