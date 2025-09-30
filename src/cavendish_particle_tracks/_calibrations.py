@@ -160,9 +160,11 @@ class CalibrationManager:
             layer.refresh()
 
     def on_mouse(self, layer, event):
-        print(f"Detected mouse event {event} on layer {layer}")
-        print(f"WAS mouse button {event.button} on layer {layer}")
-
+        #print(f"Detected mouse event {event} on layer {layer}")
+        #print(f"WAS mouse button {event.button} with type {event.type} on layer {layer}")
+        #print("thing MBR ", QMouseEvent.MouseButtonRelease)
+        #print("thing L-BU ", Qt.MouseButton.LeftButton)
+        #print("thing R-BU ", Qt.MouseButton.RightButton)
         if event.button == 2:
             coords = layer.world_to_data(event.position)
             print(f"coords = {coords}")
@@ -174,7 +176,7 @@ class CalibrationManager:
 
             type = layer.properties["types"][i]
 
-            print(f" got 1 and type {type}")
+            #print(f" got 1 and type {type}")
 
             def show_menu(type):
                 # build popup menu
@@ -204,14 +206,14 @@ class CalibrationManager:
                     act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
                     menu.addAction(act)
 
-                print(f" got 2 ")
+                #print(f" got 2 ")
 
                 # "no name" entry
                 noname = QAction("❌ Clear", menu)
                 noname.triggered.connect(lambda _: self.rename_point(i, "", type))
                 menu.addAction(noname)
 
-                print(f" got 3 ")
+                #print(f" got 3 ")
 
                 # custom name entry
                 def custom_name():
@@ -224,19 +226,19 @@ class CalibrationManager:
                     if ok and text.strip():
                         self.rename_point(i, text.strip(), type)
 
-                print(f" got 4 ")
+                #print(f" got 4 ")
 
                 menu.addSeparator()
                 custom = QAction("Custom name ...", menu)
                 custom.triggered.connect(custom_name)
                 menu.addAction(custom)
 
-                print(f" got 5 ")
+                #print(f" got 5 ")
 
                 # popup at cursor position
                 menu.exec_(pos)  # use captured global cursor pos -- see (*) below
 
-            print(" got 6 ")
+            p#rint(" got 6 ")
 
             # capture cursor now
             pos = QCursor.pos()  # (*)
@@ -248,7 +250,7 @@ class CalibrationManager:
             """
             QTimer.singleShot(100, lambda: show_menu(type))
 
-            print(f" got 7 ")
+            #print(f" got 7 ")
 
 
 
