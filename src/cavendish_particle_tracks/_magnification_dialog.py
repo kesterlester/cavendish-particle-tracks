@@ -162,7 +162,7 @@ class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
         """When 'Add' is selected, the selected point is added to the corresponding fiducial text box"""
 
         selected_points = self.parent._get_selected_points(
-            layer_name=MAGNIFICATION_LAYER_NAME
+            layer_names = self.parent.calibration_manager.generic_calibration_layer_names() # + [MAGNIFICATION_LAYER_NAME] +
         )
 
         # Forcing only 1 points

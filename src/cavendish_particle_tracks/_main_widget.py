@@ -180,7 +180,13 @@ class ParticleTracksWidget(QWidget):
 
         self.calibration_manager = CalibrationManager(self.viewer)
 
+    def closeEvent(self, event):
+        print("GOT CLOSE EVENT in main widget")
+        super().closeEvent()
+
     def hideEvent(self, event):
+        print("GOT HIDE EVENT in main widget")
+
         """When the widget is 'closed' (napari just hides it), show the layer buttons again.
         If data has been recorded, prompt the user to save it before closing the widget.
         """
@@ -213,16 +219,20 @@ class ParticleTracksWidget(QWidget):
         # update for 4d implementation as appropriate.
         return (self.viewer.camera.center[1], self.viewer.camera.center[2])
 
-    def _get_selected_points(self, layer_name=MEASUREMENTS_LAYER_NAME) -> np.array:
-        """Returns array of selected points in the viewer"""
+    def _get_selected_points(self, layer_names = [MEASUREMENTS_LAYER_NAME]) -> np.array:
+        """Returns array of selected points in the viewer.
+        Beware that if the caller supplies layer_names with points of different dimensions in them,
+        then this function will be unable to create the np.array() for the output.
+        So it is the caller's responsibility to provide only layers which have points
+        that are compatible with each other."""
 
         # Filtering selected layer (layer names are unique)
         points_layers = [
-            layer for layer in self.viewer.layers if layer.name == layer_name
+            layer for layer in self.viewer.layers if layer.name in layer_names
         ]
         # Returning selected points in the layer
         selected_points = np.array(
-            [points_layers[0].data[i] for i in points_layers[0].selected_data]
+            [ points_layer.data[i] for points_layer in points_layers for i in points_layer.selected_data ]
         )
         return selected_points
 
@@ -353,17 +363,17 @@ class ParticleTracksWidget(QWidget):
         if len(selected_points) == 0:
             napari.utils.notifications.show_error("You have not selected any points.")
             return
-        elif len(selected_points) != 3:
+
+        if len(selected_points) != 3:
             napari.utils.notifications.show_error(
                 "Select three points to calculate the path radius."
             )
             return
-        else:
 
-            if not self._selected_points_are_on_current_slice(selected_points):
-                return
+        if not self._selected_points_are_on_current_slice(selected_points):
+            return
 
-            selected_points_xy = [point[2:] for point in selected_points]
+        selected_points_xy = [point[2:] for point in selected_points]
 
         try:
             selected_row = self._get_selected_row()

@@ -83,6 +83,11 @@ class CalibrationManager:
         # This is the thing that changes which fiducials are visible when the view slider is slid:
         self.viewer.dims.events.current_step.connect(self.callback_calibration_layer_visibility)
 
+    # TODO: could make generic_calibration_layers subservient to generic_calibration_layer_names instead of current way round.
+    def generic_calibration_layer_names(self):
+        return [layer.name for layer in self.generic_calibration_layers()]
+
+    # TODO: could make generic_calibration_layers subservient to generic_calibration_layer_names instead of current way round.
     def generic_calibration_layers(self):
         return self._generic_calibration_layers
 
