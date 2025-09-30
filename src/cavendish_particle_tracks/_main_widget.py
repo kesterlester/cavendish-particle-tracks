@@ -388,7 +388,7 @@ class ParticleTracksWidget(QWidget):
 
             # Assigns the points and radius to the selected row
             self.data[selected_row].rpoints = selected_points_xy
-
+            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("rpoints"),
@@ -397,7 +397,7 @@ class ParticleTracksWidget(QWidget):
 
             print("calculating radius!")
             self.data[selected_row].radius_px = radius(*selected_points_xy)
-
+            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("radius_px"),
@@ -408,6 +408,7 @@ class ParticleTracksWidget(QWidget):
             self.data[selected_row].radius_cm = (
                 self.data[selected_row].magnification * self.data[selected_row].radius_px
             )
+            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("radius_cm"),
@@ -418,6 +419,8 @@ class ParticleTracksWidget(QWidget):
                 "Radius added to particle " + str(selected_row)
             )
             print(self.data[selected_row])
+
+
 
     def _on_click_length(self) -> None:
         """When the 'Calculate length' button is clicked, calculate the decay length
@@ -456,7 +459,7 @@ class ParticleTracksWidget(QWidget):
 
             print(f"Adding points to the table: {selected_points_xy}")
             self.data[selected_row].dpoints = selected_points_xy
-
+            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("dpoints"),
@@ -465,6 +468,7 @@ class ParticleTracksWidget(QWidget):
 
             print("calculating decay length!")
             self.data[selected_row].decay_length_px = length(*selected_points)
+            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("decay_length_px"),
@@ -476,6 +480,7 @@ class ParticleTracksWidget(QWidget):
                 self.data[selected_row].magnification
                 * self.data[selected_row].decay_length_px
             )
+            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("decay_length_cm"),
@@ -650,6 +655,7 @@ class ParticleTracksWidget(QWidget):
             new_particle.view_number = self.viewer.dims.current_step[0]
 
         self.data += [new_particle]
+        self.mark_dirty(True)
 
         # add particle (== new row) to the table and select it
         self.table.insertRow(self.table.rowCount())
@@ -694,6 +700,7 @@ class ParticleTracksWidget(QWidget):
 
             if return_code == QMessageBox.Yes:
                 del self.data[selected_row]
+                self.mark_dirty(True)
                 self.table.removeRow(selected_row)
 
     def _on_click_magnification(self) -> MagnificationDialog:
@@ -715,6 +722,7 @@ class ParticleTracksWidget(QWidget):
         for particle in self.data:
             particle.magnification_a = a
             particle.magnification_b = b
+            self.mark_dirty(True)
 
     def _on_click_apply_magnification(self) -> None:
         """Changes the visualisation of the table to show calibrated values for radius and decay_length"""
@@ -727,6 +735,7 @@ class ParticleTracksWidget(QWidget):
 
         for i in range(len(self.data)):
             self.data[i].calibrate()
+            self.mark_dirty(True)
             self.table.setItem(
                 i,
                 self._get_table_column_index("magnification"),
@@ -754,7 +763,10 @@ class ParticleTracksWidget(QWidget):
         When the 'Save' button is clicked, the data is saved to a csv file with the current date and time as the filename.
         """
 
-        if not len(self.data):
+        # TODO: This is bad. There should be no reason a user cannot save
+        # an empty file. However, it seems to be here as some of the code
+        # below needs to access self.data[0] to write headers!!!
+        if not len(self.data): # Disabling as no reason not to sav
             napari.utils.notifications.show_error(
                 "There is no data in the table to save."
             )
@@ -788,7 +800,7 @@ class ParticleTracksWidget(QWidget):
         elif file_name.endswith(".csv"):
             with open(file_name, "w", encoding="UTF8", newline="") as f:
                 # write the header
-                f.write(",".join(self.data[0].vars_to_save()) + "\n")
+                f.write(",".join(self.data[0].vars_to_save()) + "\n") # TODO: FIX! Should not access data[0] as this prevents saving empty file.
 
                 # write the data
                 f.writelines([particle.to_csv() for particle in self.data])
@@ -804,6 +816,7 @@ class ParticleTracksWidget(QWidget):
             self.msg.show()
             return
 
+        self.mark_dirty(False)
         napari.utils.notifications.show_info("Data saved to " + file_name)
 
     # Probably no longer needed once mag and angle dialogs work same way as stereo!

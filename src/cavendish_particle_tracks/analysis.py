@@ -185,7 +185,7 @@ class ParticleDecay:
     phi_pion: float = -100
 
     def vars_to_show(self, calibrated=False):
-        if calibrated:
+        if calibrated:  # TODO: This is a mess!! Some particles may be calibrated and others not. And why not write out radius_px always in case re-anaalysis is needed later. Just always write out everything.
             return [
                 "event_number",
                 "name",
