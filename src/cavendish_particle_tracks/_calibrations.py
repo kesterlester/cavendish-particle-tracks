@@ -108,7 +108,8 @@ class CalibrationManager:
     # Private method to Make all the calibration layers invisible:
     def _hide_calibration_layers(self):
         for layer in self.generic_calibration_layers():
-            layer.visible = False
+            if layer.visible != False: # Avoid generating unnecessary triggers:
+                layer.visible = False
 
     # Make the correct calibration layers visible/invisible based on the view slider:
     def _show_and_activate_correct_calibration_layer(self):
@@ -117,10 +118,13 @@ class CalibrationManager:
         for i, layer in enumerate(self.generic_calibration_layers()):
             # Make the current view active if so requested:
             if self._calibration_layer_focus and i == current_view:
-                self.viewer.layers.selection.active = layer
+                if self.viewer.layers.selection.active != layer: # Avoid generating unnecessary triggers
+                    self.viewer.layers.selection.active = layer
 
             # Make the relevant views visible or invisible:
-            layer.visible = (i == current_view)
+            desired_state =  (i == current_view)
+            if layer.visible != desired_state: # Avoid generating unnecessary triggers:
+                layer.visible = desired_state
 
     def _refresh_visibility_and_focus_of_calibration_layers(self):
         if self._calibration_layer_visibility:
