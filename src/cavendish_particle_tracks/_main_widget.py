@@ -61,14 +61,9 @@ class ParticleTracksWidget(QWidget):
     def has_unsaved_data(self):
         # Need to check attributes as could get a callback before we are ready!
         try:
-            print("about to compare")
-            print(self.data)
-            print("with")
-            print(self._data_at_last_save)
             return self.data != self._data_at_last_save
         except:
-            print("not doing compare")
-            # We are not even constructed yet!
+            # Attributes are missing so we are not even constructed yet!
             return False
 
     def __init__(
@@ -369,7 +364,6 @@ class ParticleTracksWidget(QWidget):
 
             # Assigns the points and radius to the selected row
             self.data[selected_row].rpoints = selected_points_xy
-            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("rpoints"),
@@ -378,7 +372,6 @@ class ParticleTracksWidget(QWidget):
 
             print("calculating radius!")
             self.data[selected_row].radius_px = radius(*selected_points_xy)
-            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("radius_px"),
@@ -389,7 +382,6 @@ class ParticleTracksWidget(QWidget):
             self.data[selected_row].radius_cm = (
                 self.data[selected_row].magnification * self.data[selected_row].radius_px
             )
-            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("radius_cm"),
@@ -440,7 +432,6 @@ class ParticleTracksWidget(QWidget):
 
             print(f"Adding points to the table: {selected_points_xy}")
             self.data[selected_row].dpoints = selected_points_xy
-            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("dpoints"),
@@ -449,7 +440,6 @@ class ParticleTracksWidget(QWidget):
 
             print("calculating decay length!")
             self.data[selected_row].decay_length_px = length(*selected_points)
-            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("decay_length_px"),
@@ -461,7 +451,6 @@ class ParticleTracksWidget(QWidget):
                 self.data[selected_row].magnification
                 * self.data[selected_row].decay_length_px
             )
-            self.mark_dirty(True)
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("decay_length_cm"),
@@ -636,7 +625,6 @@ class ParticleTracksWidget(QWidget):
             new_particle.view_number = self.viewer.dims.current_step[0]
 
         self.data += [new_particle]
-        self.mark_dirty(True)
 
         # add particle (== new row) to the table and select it
         self.table.insertRow(self.table.rowCount())
@@ -681,7 +669,6 @@ class ParticleTracksWidget(QWidget):
 
             if return_code == QMessageBox.Yes:
                 del self.data[selected_row]
-                self.mark_dirty(True)
                 self.table.removeRow(selected_row)
 
     def _on_click_magnification(self) -> MagnificationDialog:
@@ -703,7 +690,6 @@ class ParticleTracksWidget(QWidget):
         for particle in self.data:
             particle.magnification_a = a
             particle.magnification_b = b
-            self.mark_dirty(True)
 
     def _on_click_apply_magnification(self) -> None:
         """Changes the visualisation of the table to show calibrated values for radius and decay_length"""
@@ -716,7 +702,6 @@ class ParticleTracksWidget(QWidget):
 
         for i in range(len(self.data)):
             self.data[i].calibrate()
-            self.mark_dirty(True)
             self.table.setItem(
                 i,
                 self._get_table_column_index("magnification"),

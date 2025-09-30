@@ -21,6 +21,4 @@ class MyPluginWidget(Foo):  # Foo can be any base class
 import napari
 viewer = napari.Viewer()
 plugin = MyPluginWidget(viewer)
-
-plugin.mark_dirty(True)  # mark as having unsaved data
 napari.run()

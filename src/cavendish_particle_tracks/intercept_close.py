@@ -3,6 +3,7 @@ The intercept_close decorator manages the intercepting of window close requests 
 
 Use like this:
 
+##############################
 from intercept_close import InterceptClose
 
 class Foo:
@@ -19,16 +20,10 @@ class MyPluginWidget(Foo):  # Foo can be any base class
     def has_unsaved_data(self):
         return True # or something more appropriate!
 
-    def save_data(self):
-        print("Saving my data...")
-
 import napari
 viewer = napari.Viewer()
 plugin = MyPluginWidget(viewer)
-##plugin.mark_dirty(True)  # mark as having unsaved data
 napari.run()
-
-
 ##############################
 """
 
@@ -45,12 +40,6 @@ def InterceptClose(cls):
             self._dirty = False
             self._interceptor = _CloseInterceptor(viewer, self)
             viewer.window._qt_window.installEventFilter(self._interceptor)
-
-        def mark_dirty(self, state=True):
-            self._dirty = state
-
-        #def has_unsaved_data(self):
-        #    return super().has_unsaved_data()
 
     # copy metadata so it looks like the original class
     functools.update_wrapper(Wrapped, cls, updated=())
