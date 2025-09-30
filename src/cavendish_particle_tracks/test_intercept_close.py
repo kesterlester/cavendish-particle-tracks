@@ -13,8 +13,8 @@ class MyPluginWidget(Foo):  # Foo can be any base class
         super().__init__() # initialise Foo
         self.viewer = viewer
 
-    def save_data(self):
-        print("Saving my data...")
+    def has_unsaved_data(self):
+        return True  # or something more fancy
 
 ##############################
 

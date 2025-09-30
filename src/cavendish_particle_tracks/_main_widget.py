@@ -58,6 +58,19 @@ class ParticleTracksWidget(QWidget):
 
     layer_measurements: napari.layers.Points
 
+    def has_unsaved_data(self):
+        # Need to check attributes as could get a callback before we are ready!
+        try:
+            print("about to compare")
+            print(self.data)
+            print("with")
+            print(self._data_at_last_save)
+            return self.data != self._data_at_last_save
+        except:
+            print("not doing compare")
+            # We are not even constructed yet!
+            return False
+
     def __init__(
         self,
         napari_viewer: napari.Viewer,
@@ -163,6 +176,8 @@ class ParticleTracksWidget(QWidget):
 
         # Data analysis
         self.data: list[ParticleDecay] = []
+        self._data_at_last_save = self.data.copy()
+
         # might not need this eventually
         self.mag_a = -1.0
         self.mag_b = 0.0
@@ -782,7 +797,7 @@ class ParticleTracksWidget(QWidget):
             self.msg.show()
             return
 
-        self.mark_dirty(False)
+        self._data_at_last_save = self.data.copy() # mark as clean!
         napari.utils.notifications.show_info("Data saved to " + file_name)
 
     # Probably no longer needed once mag and angle dialogs work same way as stereo!

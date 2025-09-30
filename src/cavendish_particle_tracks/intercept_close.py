@@ -16,13 +16,16 @@ class MyPluginWidget(Foo):  # Foo can be any base class
         super().__init__() # initialise Foo
         self.viewer = viewer
 
+    def has_unsaved_data(self):
+        return True # or something more appropriate!
+
     def save_data(self):
         print("Saving my data...")
 
 import napari
 viewer = napari.Viewer()
 plugin = MyPluginWidget(viewer)
-plugin.mark_dirty(True)  # mark as having unsaved data
+##plugin.mark_dirty(True)  # mark as having unsaved data
 napari.run()
 
 
@@ -46,8 +49,8 @@ def InterceptClose(cls):
         def mark_dirty(self, state=True):
             self._dirty = state
 
-        def has_unsaved_data(self):
-            return self._dirty
+        #def has_unsaved_data(self):
+        #    return super().has_unsaved_data()
 
     # copy metadata so it looks like the original class
     functools.update_wrapper(Wrapped, cls, updated=())
@@ -65,7 +68,12 @@ class _CloseInterceptor(QObject):
         self.viewer = viewer
 
     def eventFilter(self, obj, event):
+
         if event.type() == QEvent.Close:
+            if getattr(self.plugin, "has_unsaved_data"):
+                print("EF has has_unsaved_data")
+            else:
+                print("EF lacks has_unsaved_data")
             if getattr(self.plugin, "has_unsaved_data", lambda: False)():
 
                 reply = QMessageBox.warning(
