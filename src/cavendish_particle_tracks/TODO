@@ -1,0 +1,2 @@
+Move most simple messages to the same format used after successful file save: napari.utils.notifications.show_info("Data saved to " + file_name)
+
