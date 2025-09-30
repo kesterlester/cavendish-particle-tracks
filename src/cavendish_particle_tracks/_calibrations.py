@@ -33,7 +33,8 @@ opening stereoshift_dialog with:
 
 import cavendish_particle_tracks as cpt
 cm = cpt.get_singleton().calibration_manager
-cm._setup_stereoshift_layers(read_from_file=True)
+cm._setup_calibration_layers(read_from_file=True)
+cm._refresh_visibility_and_focus_of_calibration_layers()
 
 import cavendish_particle_tracks as cpt
 cm = cpt.get_singleton().calibration_manager
@@ -394,15 +395,26 @@ class CalibrationManager:
         else:
             layers = self._default_generic_calibration_layers()
 
-        # Tell Napari about the generic calibration layers, deleting any old ones if necessary.
+        # Overwrite data if layer already exists, otherwise make a note of new layers
+        new_layers = []
         for layer in layers:
             if layer.name in self.viewer.layers:
                 # Existing layer, so callbacks already exist too, so just overwrite old layer data:
                 overwrite_layer(self.viewer.layers[layer.name], layer)
-                print("\n\n DURING REPLACEMENT \n\n")
+                print("\n\n REPLACING DATA \n\n")
             else:
                 # New layer!
-                self.viewer.add_layer(layer)
-                print("\n\n DURING original \n\n")
+                new_layers.append(layer)
+                print("\n\n NOTING NEW LAYER \n\n")
 
-        return layers
+        # Tell Napari about any new generic calibration layers:
+        if new_layers:
+            add_as_group = False
+            if add_as_group:
+                pass
+            else:
+                # add individually
+                for new_layer in new_layers:
+                    self.viewer.add_layer(new_layer)
+
+        return new_layers
