@@ -1,6 +1,1 @@
 Move most simple messages to the same format used after successful file save: napari.utils.notifications.show_info("Data saved to " + file_name)
-
-Make a dirty_detection decorator for _main_widget.data
-
-Take stuff out of the close interceptor so that instead of us having to call its make_dirty, instead we tell it how to ask us if we are dirty. That way we can feed it an appropriate output.
-

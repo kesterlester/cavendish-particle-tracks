@@ -61,7 +61,7 @@ class _CloseInterceptor(QObject):
         if event.type() == QEvent.Close:
             if not getattr(self.plugin, "has_unsaved_data"):
                 print("Warning!  Did your plugin forget to implement the has_unsaved_data method needed by the CLoseInterceptor?")
-            
+
             if getattr(self.plugin, "has_unsaved_data", lambda: False)():
 
                 reply = QMessageBox.warning(
