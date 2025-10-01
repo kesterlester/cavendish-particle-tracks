@@ -34,8 +34,7 @@ opening stereoshift_dialog with:
 
 import cavendish_particle_tracks as cpt
 cm = cpt.get_singleton().calibration_manager
-cm._setup_calibration_layers(read_from_file=True)
-cm._refresh_visibility_and_focus_of_calibration_layers()
+cm.load_calibration()
 
 import cavendish_particle_tracks as cpt
 cm = cpt.get_singleton().calibration_manager
@@ -99,6 +98,11 @@ class CalibrationManager:
         # A simple python list of napari points layers.
         return self.generic_calibration_layers()  # Later might add  [ self.specific_calibration_layer ]
 
+    def load_calibration(self):
+        self._setup_calibration_layers(read_from_file=True)
+        self._refresh_visibility_and_focus_of_calibration_layers()
+        self.refresh_symbol_sizes()
+
     def save_calibration(self):
         for i, layer in enumerate(self.generic_calibration_layers()):
             layer.save(self.filename_for_generic_calibration_layer(i)) # saves to csv file
@@ -108,6 +112,17 @@ class CalibrationManager:
         self._refresh_visibility_and_focus_of_calibration_layers()
 
     def callback_symbol_size(self, event: napari.utils.events.Event):
+        screen_pixels_per_data_pixel = event.value # This value (up to zoom changes since call)
+        # should be the same as self.viewer.camera.zoom.
+        # Since that is what the refresh_symbol_sizes method uses as its default, both of
+        # the following should be equal for all practical puropses:
+
+        # Alternative one:
+        # self.refresh_symbol_sizes(screen_pixels_per_data_pixel)
+        # Alternative two:
+        self.refresh_symbol_sizes()
+
+    def refresh_symbol_sizes(self, screen_pixels_per_data_pixel=None):
         # https://napari.org/dev/guides/events_reference.html says that
         # event.value is "Scale from canvas pixels to world pixels." which is
         # not very clear. Experiment seems to clarify that it is "data pixel width" / "screen pixel width"
@@ -118,8 +133,8 @@ class CalibrationManager:
         # they remain easy to see even when you zoom out.
         # If you zoom in far enough you are probably trying to place them precisely, so in that case I may wish
         # them to shrink a bit for fine placement, but this might not be necessary.
-
-        screen_pixels_per_data_pixel = event.value
+        if screen_pixels_per_data_pixel == None:
+            screen_pixels_per_data_pixel = self.viewer.camera.zoom
 
         generic_symbol_size_in_screen_pixels = 20
         front_fid_target_size_in_screen_pixels = 1.0 * generic_symbol_size_in_screen_pixels
@@ -150,7 +165,7 @@ class CalibrationManager:
         self._calibration_layer_focus = focus
         self._refresh_visibility_and_focus_of_calibration_layers()
 
-    # Private method to Make all the calibration layers invisible:
+    # Private method to make all the calibration layers invisible:
     def _hide_calibration_layers(self):
         for layer in self.generic_calibration_layers():
             if layer.visible != False: # Avoid generating unnecessary triggers:
