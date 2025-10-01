@@ -161,13 +161,16 @@ class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
     def _add_coords(self, fiducial: int) -> list[float]:
         """When 'Add' is selected, the selected point is added to the corresponding fiducial text box"""
 
+        layer_names = self.parent.calibration_manager.generic_calibration_layer_names()  # + [MAGNIFICATION_LAYER_NAME] +
+
         selected_points = self.parent._get_selected_points(
-            layer_names = self.parent.calibration_manager.generic_calibration_layer_names() # + [MAGNIFICATION_LAYER_NAME] +
+            layer_names = layer_names
         )
 
         # Forcing only 1 points
         if len(selected_points) != 1:
-            print("Select (only) one point to add fiducial.")
+            message = f"Currently {len(selected_points)} are selected. This button requires only one fiducial point to have been selected from layers {layer_names}."
+            napari.utils.notifications.show_info(message)
             return [-1.0e6, -1.0e6]
 
         textbox = self.txboxes[fiducial]
