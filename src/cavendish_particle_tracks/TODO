@@ -1,1 +1,3 @@
 Move most simple messages to the same format used after successful file save: napari.utils.notifications.show_info("Data saved to " + file_name)
+
+At present one is not allowed to save data when the table is empty (no data) ... even though the "you have unsaved data" may trigger if there were previous rows that have since been deleted. Getting rid of the inability to save empty data would be good!
