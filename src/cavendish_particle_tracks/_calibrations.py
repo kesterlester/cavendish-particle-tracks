@@ -1,6 +1,7 @@
 
 import numpy as np
 import napari
+
 from qtpy.QtWidgets import (
     QComboBox,
     QDialog,
@@ -83,6 +84,9 @@ class CalibrationManager:
         # This is the thing that changes which fiducials are visible when the view slider is slid:
         self.viewer.dims.events.current_step.connect(self.callback_calibration_layer_visibility)
 
+        # symbol size management
+        self.viewer.camera.events.zoom.connect(self.callback_symbol_size)
+
     # TODO: could make generic_calibration_layers subservient to generic_calibration_layer_names instead of current way round.
     def generic_calibration_layer_names(self):
         return [layer.name for layer in self.generic_calibration_layers()]
@@ -102,6 +106,41 @@ class CalibrationManager:
     # Callback for when the 'View' slider changes:
     def callback_calibration_layer_visibility(self, event):
         self._refresh_visibility_and_focus_of_calibration_layers()
+
+    def callback_symbol_size(self, event: napari.utils.events.Event):
+        # https://napari.org/dev/guides/events_reference.html says that
+        # event.value is "Scale from canvas pixels to world pixels." which is
+        # not very clear. Experiment seems to clarify that it is "data pixel width" / "screen pixel width"
+        # which (be careful here!) has units of "screen_pixels_per_data_pixel".
+        # rather than the reciprocal of this.
+
+        # I would like symbols for fiducials to typically be a fixed number of screen pixels in height, so that
+        # they remain easy to see even when you zoom out.
+        # If you zoom in far enough you are probably trying to place them precisely, so in that case I may wish
+        # them to shrink a bit for fine placement, but this might not be necessary.
+
+        screen_pixels_per_data_pixel = event.value
+
+        generic_symbol_size_in_screen_pixels = 20
+        front_fid_target_size_in_screen_pixels = 1.0 * generic_symbol_size_in_screen_pixels
+        back_fid_target_size_in_screen_pixels = 0.7 * generic_symbol_size_in_screen_pixels
+
+        generic_symbol_size_in_data_pixels = generic_symbol_size_in_screen_pixels / screen_pixels_per_data_pixel
+        front_fid_size_in_data_pixels = front_fid_target_size_in_screen_pixels / screen_pixels_per_data_pixel
+        back_fid_size_in_data_pixels = back_fid_target_size_in_screen_pixels / screen_pixels_per_data_pixel
+
+        def data_pixel_size_for(typ: str):
+            if typ=="front":
+                return front_fid_size_in_data_pixels
+            if typ=="back":
+                return back_fid_size_in_data_pixels
+            return generic_symbol_size_in_data_pixels
+
+        for layer in self.generic_calibration_layers():
+            types = layer.properties["types"]
+            orig_symbol_sizes = layer.size.copy()
+            new_symbol_sizes = [ data_pixel_size_for(typ)  for typ in types ]
+            layer.size = new_symbol_sizes # This updates the symbol size as desired.
 
     # Show or hide calibration layers
     def set_calibration_layer_visibility_and_focus(self, visbility: bool, focus: bool):
