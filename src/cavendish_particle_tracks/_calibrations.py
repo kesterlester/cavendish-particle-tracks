@@ -238,7 +238,7 @@ class CalibrationManager:
                 # popup at cursor position
                 menu.exec_(pos)  # use captured global cursor pos -- see (*) below
 
-            p#rint(" got 6 ")
+            #print(" got 6 ")
 
             # capture cursor now
             pos = QCursor.pos()  # (*)

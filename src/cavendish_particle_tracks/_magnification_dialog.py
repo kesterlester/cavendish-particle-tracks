@@ -169,7 +169,7 @@ class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
 
         # Forcing only 1 points
         if len(selected_points) != 1:
-            message = f"Currently {len(selected_points)} are selected. This button requires only one fiducial point to have been selected from layers {layer_names}."
+            message = f"Currently {len(selected_points)} points are selected. This button requires exaclty one fiducial point to have been selected from layers {layer_names}."
             napari.utils.notifications.show_info(message)
             return [-1.0e6, -1.0e6]
 
