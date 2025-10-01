@@ -509,10 +509,27 @@ class ParticleTracksWidget(QWidget):
 
     def _load_data_from(self, folder_name):
 
+        self.msg = QMessageBox()
+        self.msg.setIcon(QMessageBox.Warning)
+        self.msg.setWindowTitle(f"Invalid folder name.")
+        self.msg.setStandardButtons(QMessageBox.Ok)
+        self.msg.setText(
+            f"The Cavendish Particle Tracks plug in was asked to load bubble chamber photos from a folder named:\n\n   '{folder_name}'\n\nThis folder name seems to be invalid. The data folder must exist, must contain three subfolders (one for each view), and each subfolder must contain the same number (>1) of images. View folders are identified by case insensitive partial matches against the strings in {VIEW_NAMES}."
+        )
+
         if folder_name in {"", None}:
+            self.msg.show()
             return
 
         folder_subdirs = glob.glob(folder_name + "/*/")
+        print(f"folder_subdirs was {repr(folder_subdirs)}")   
+        cannot_continue = len(folder_subdirs)==0
+        # Excludes cases that either the folder did not exist, or the folder existed but was empty of subdirs.
+            
+        if cannot_continue: 
+            self.msg.show()
+            return
+
         folder_subdirs.sort() # Get View2, View1, View3 into order. No reason not to!
         
         # Checks whether the image folder contains a subdirectory for each view.
@@ -536,13 +553,6 @@ class ParticleTracksWidget(QWidget):
             and same_image_count
             and more_than_one_image
         ):
-            self.msg = QMessageBox()
-            self.msg.setIcon(QMessageBox.Warning)
-            self.msg.setWindowTitle("Data folder structure error")
-            self.msg.setStandardButtons(QMessageBox.Ok)
-            self.msg.setText(
-                "The data folder must contain three subfolders, one for each view, and each subfolder must contain the same number (>1) of images."
-            )
             self.msg.show()
             return
 
