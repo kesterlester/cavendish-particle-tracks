@@ -307,14 +307,14 @@ class CalibrationManager:
         fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
 
         #sc = 100 # Works OK on CLG's macbook but not on linux
-        sc = 40 # Attempt to find something that works passably on both linux and mac.
+        #sc = 40 # Attempt to find something that works passably on both linux and mac.
 
         # First position the point being measured:
         labels = [ "point", ]
         symbols = [ "disc", ]
         colours = ["cyan", ]
         types = ["point", ]
-        symbol_sizes = [1 * sc, ]
+        #symbol_sizes = [1 * sc, ]
         points_in_generic_view = [ [origin_x, point_origin_y, ], ]
 
         # Now position the Front/Back fiducial pairs:
@@ -322,7 +322,7 @@ class CalibrationManager:
             labels += [ "", "", ]
             types += ["front", "back", ]
             symbols += ["x", "x",]
-            symbol_sizes += [1*sc, 0.5*sc,]
+            #symbol_sizes += [1*sc, 0.5*sc,]
             points_in_generic_view += [
                 [origin_x - spread_x, fid_origin_y + i * fid_step_y, ],
                 [origin_x + spread_x, fid_origin_y + i * fid_step_y, ],
@@ -372,7 +372,8 @@ class CalibrationManager:
 
         layers = [
             self._single_generic_configuration_layer
-            (v, points_in_view[v], labels, colours, types, symbols, symbol_sizes)
+            (v, points_in_view[v], labels, colours, types, symbols, #symbol_sizes
+            )
              for v in view_indices
             ]
 
@@ -394,31 +395,33 @@ class CalibrationManager:
                 (str, 'colours'),
                 (str, 'types'),
                 (str, 'symbols'),
-                (int, 'symbol_sizes')
+                # (int, 'symbol_sizes')
                 ]
 
-            points, labels, colours, types, symbols, symbol_sizes \
-                = read_csv_with_constructors(filename, constructors)
+            # points, labels, colours, types, symbols, symbol_sizes = read_csv_with_constructors(filename, constructors)
+            points, labels, colours, types, symbols = read_csv_with_constructors(filename, constructors)
 
             layers.append(self._single_generic_configuration_layer(
-                v, points, labels, colours, types, symbols, symbol_sizes))
+                v, points, labels, colours, types, symbols, #symbol_sizes
+            ))
 
         return layers
 
     def _single_generic_configuration_layer(self, view_index,
-                                            points, labels, colours, types, symbols, symbol_sizes):
+                                            points, labels, colours, types, symbols, #symbol_sizes
+                                            ):
         props = {
             'labels': labels,
             'colours': colours,
             'types': types,
             'symbols': symbols,
-            'symbol_sizes': symbol_sizes,
+            ### 'symbol_sizes': symbol_sizes,
         }
         layer = napari.layers.Points(
             points,
             name=names_of_generic_calibration_layers[view_index],
             # size=20,
-            size=symbol_sizes,
+            ### size=symbol_sizes,
             properties=props,
             border_width=7,
             border_width_is_relative=False,
@@ -433,7 +436,7 @@ class CalibrationManager:
             'color': colours,
             'size': 12,
             'anchor': 'center',
-            'translation': np.array([-150, 0]),  # move text 150 pixels up
+            'translation': np.array([-150, 0]),  # move text 150 (data) pixels up
         }
         return layer
 
