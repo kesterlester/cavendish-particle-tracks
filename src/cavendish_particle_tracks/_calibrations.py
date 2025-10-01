@@ -206,10 +206,12 @@ class CalibrationManager:
 
         for layer in self.generic_calibration_layers():
             # print(f"before alteration {layer.text}")
-            layer.text.values[idx] = name
+            layer.text.values[idx] = name  # This change is needed for display purposes.
+            layer.properties["labels"][idx] = name  # This change is needed for saving purposes.
             # print(f"after  alteration {layer.text}")
             if other_idx is not None and other_name is not None:
-                layer.text.values[other_idx] = other_name
+                layer.text.values[other_idx] = other_name  # This change is needed for display purposes.
+                layer.properties["labels"][other_idx] = other_name  # This change is needed for saving purposes.
 
             layer.refresh()
 
