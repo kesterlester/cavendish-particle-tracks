@@ -268,7 +268,7 @@ class CalibrationManager:
         fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
 
         #sc = 100 # Works OK on CLG's macbook but not on linux
-        sc = 60 # Attempt to find something that works passably on both linux and mac.
+        sc = 40 # Attempt to find something that works passably on both linux and mac.
 
         # First position the point being measured:
         labels = [ "point", ]
