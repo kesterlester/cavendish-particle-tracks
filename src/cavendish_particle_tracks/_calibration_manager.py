@@ -512,8 +512,8 @@ After event.type='mouse_release' event.button=2
             ] # overwrites old points_in_view
             labels = debug_point_labels_all_calibration_layers
 
-        for v in view_indices:
-            print(f"Point in view {v} are {points_in_view[v]}")
+        #for v in view_indices:
+        #    print(f"Point in view {v} are {points_in_view[v]}")
 
         layers = [
             self._single_generic_configuration_layer
