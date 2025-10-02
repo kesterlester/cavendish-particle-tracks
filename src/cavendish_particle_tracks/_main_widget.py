@@ -614,8 +614,8 @@ class ParticleTracksWidget(QWidget):
             )
 
     def _on_click_new_particle(self) -> None:
-        """When the 'New particle' button is clicked, append a new blank row to
-        the table and select the first cell ready to recieve the first point.
+        """When the 'New process' button is clicked, append a new blank row to
+        the table and select the first cell ready to receive the first point.
         """
         if self.particle_decays_menu.currentIndex() < 1:
             return

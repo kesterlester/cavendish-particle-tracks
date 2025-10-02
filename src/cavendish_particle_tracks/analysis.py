@@ -93,7 +93,7 @@ TYPICAL_IMAGE_SHORT_SIZE_PIX = 2753 # This is just typical. No guarantee that an
 VIEW_NAMES = ["view1", "view2", "view3"]
 
 EXPECTED_PARTICLES = [
-    "New particle",
+    "New process",
     "Σ⁺ ⇨ p + π⁰",
     "Σ⁺ ⇨ n + π⁺",
     "Σ⁻ ⇨ n + π⁻",
