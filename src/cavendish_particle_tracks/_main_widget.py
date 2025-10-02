@@ -31,7 +31,7 @@ from qtpy.QtWidgets import (
 
 from ._calculate import length, radius
 from ._decay_angles_dialog import DecayAnglesDialog
-from ._magnification_dialog import MagnificationDialog
+from ._image_calibration_dialog import MagnificationDialog
 from ._settings import get_bypass, get_shuffling_seed
 from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
