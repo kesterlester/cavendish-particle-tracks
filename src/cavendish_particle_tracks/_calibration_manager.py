@@ -47,7 +47,6 @@ dialog ... so the above may change.
 view_indices = (0, 1, 2)
 GENERIC_CALIBRATION_LAYER_NAMES = [f"Calibration (generic; camera {v + 1})" for v in view_indices]
 PER_IMAGE_CALIBRATION_LAYER_NAME = "Calibration (per-image)"
-#TODO: This class should take over manangement of the visibility and focus of layer PER_IMAGE_CALIBRATION_LAYER_NAME, which is currently handled by _image_calibration_dialog.py
 
 class CalibrationManager:
     """
@@ -80,8 +79,10 @@ class CalibrationManager:
 
     def event_calibration_layer(self) -> napari.layers.Points:
         if PER_IMAGE_CALIBRATION_LAYER_NAME in self.parent.viewer.layers:
+            # Layer already exists, so just return it:
             return self.parent.viewer.layers[PER_IMAGE_CALIBRATION_LAYER_NAME]
-        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME)
+        # Layer does not already exist, so construct and return it:
+        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME, visible=False)
 
     def _setup_callbacks(self):
         for layer in self.generic_calibration_layers():
@@ -109,7 +110,7 @@ class CalibrationManager:
 
     def load_calibration(self):
         self._setup_calibration_layers(read_from_file=True)
-        self._refresh_visibility_and_focus_of_calibration_layers()
+        self._refresh_visibility_and_focus_of_all_calibration_layers()
         self.refresh_symbol_sizes()
 
     def save_calibration(self):
@@ -118,7 +119,7 @@ class CalibrationManager:
 
     # Callback for when the 'View' slider changes:
     def callback_calibration_layer_visibility(self, event):
-        self._refresh_visibility_and_focus_of_calibration_layers()
+        self._refresh_visibility_and_focus_of_all_calibration_layers()
 
     def callback_symbol_size(self, event: napari.utils.events.Event):
         screen_pixels_per_data_pixel = event.value # This value (up to zoom changes since call)
@@ -183,16 +184,16 @@ class CalibrationManager:
         # focus=True means that when the relevant view is made visible, it will also be given focus.
         self._calibration_layer_visibility = visbility
         self._calibration_layer_focus = focus
-        self._refresh_visibility_and_focus_of_calibration_layers()
+        self._refresh_visibility_and_focus_of_all_calibration_layers()
 
     # Private method to make all the calibration layers invisible:
-    def _hide_calibration_layers(self):
+    def _hide_generic_calibration_layers(self):
         for layer in self.generic_calibration_layers():
             if layer.visible != False: # Avoid generating unnecessary triggers:
                 layer.visible = False
 
     # Make the correct calibration layers visible/invisible based on the view slider:
-    def _show_and_activate_correct_calibration_layer(self):
+    def _show_and_activate_correct_generic_calibration_layer(self):
         current_view = self.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
 
         for i, layer in enumerate(self.generic_calibration_layers()):
@@ -206,11 +207,13 @@ class CalibrationManager:
             if layer.visible != desired_state: # Avoid generating unnecessary triggers:
                 layer.visible = desired_state
 
-    def _refresh_visibility_and_focus_of_calibration_layers(self):
+    def _refresh_visibility_and_focus_of_all_calibration_layers(self):
         if self._calibration_layer_visibility:
-            self._show_and_activate_correct_calibration_layer()
+            self._show_and_activate_correct_generic_calibration_layer()
+            self.event_calibration_layer().visible = True
         else:
-            self._hide_calibration_layers()
+            self._hide_generic_calibration_layers()
+            self.event_calibration_layer().visible = False
 
     def clone_fid_into_event(self, idx, name):
         print(f"About to clone generic fiducial {idx=} with {name=} into event.")

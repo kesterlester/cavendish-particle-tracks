@@ -37,7 +37,6 @@ class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
         # region UI Setup
         self.ui_setup()
         self.magnification_layer = parent.calibration_manager.event_calibration_layer()
-        #self.magnification_layer = self.create_or_retrieve_magnification_layer()
 
     def ui_setup(self):
         # Drop-down selection of Fiducials
@@ -202,8 +201,5 @@ class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
         return super().show()
 
     def reject(self) -> None:
-        """On reject remove the magnification layer"""
-
         self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(False, False)
-        self.parent._deactivate_calibration_layer(self.magnification_layer)
         return super().reject()
