@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
     def __init__(self, parent):
-        super().__init__(tokens=["controls_calibration_layers"], parent=parent, title="Calibration")
+        super().__init__(tokens=["controls_calibration_layers"], parent=parent, title="Image Calibration")
         self.parent: ParticleTracksWidget = parent
 
         self.f1 = Fiducial()
