@@ -322,7 +322,6 @@ After event.type='mouse_release' event.button=2
         our_sort_of_event = event.type == "mouse_press" and event.button == 2
 
         if not our_sort_of_event:
-            event.ignore()
             return
 
         assert our_sort_of_event
@@ -330,21 +329,23 @@ After event.type='mouse_release' event.button=2
         # Record position at mouse down (not at mouse up which could be different if there was a drag inbetween):
         coords = layer.world_to_data(event.position)
 
-        # Wait for release:
-        while event.type != "mouse_release":
-            # use of yield explained in https://forum.image.sc/t/custom-mouse-shortcuts-to-help-creating-labels-in-napari/70930/6
-            # There is also a sideways reference in https://napari.org/0.4.18/gallery/mouse_drag_callback.html# and another in
-            # https://github.com/napari/napari/issues/3246#issuecomment-905803916 which mentions a generator being expected for the callback.
-            # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
-            yield
+        #### WAIT FOR RELEASE HERE OR BELOW
 
-        assert event.type == "mouse_release"
+        ## Wait for release:
+        #while event.type != "mouse_release":
+        #    # use of yield explained in https://forum.image.sc/t/custom-mouse-shortcuts-to-help-creating-labels-in-napari/70930/6
+        #    # There is also a sideways reference in https://napari.org/0.4.18/gallery/mouse_drag_callback.html# and another in
+        #    # https://github.com/napari/napari/issues/3246#issuecomment-905803916 which mentions a generator being expected for the callback.
+        #    # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
+        #    yield
+        #assert event.type == "mouse_release"
 
         # We can now make the menu appear:
 
         index_of_nearest_point = layer.get_value(coords, world=True)
         if index_of_nearest_point is None:
             # This was not a right-click on a point.
+            event.handled = True
             return
 
         i = index_of_nearest_point  # Just abbreviation shorthand.
@@ -413,7 +414,23 @@ After event.type='mouse_release' event.button=2
             # popup at cursor position
             menu.exec_(event.native.globalPos())
 
+
         show_drop_down_menu(type)
+
+        #### WAIT FOR RELEASE HERE OR ABOVE
+
+        # Wait for release:
+        while event.type != "mouse_release":
+            # use of yield explained in https://forum.image.sc/t/custom-mouse-shortcuts-to-help-creating-labels-in-napari/70930/6
+            # There is also a sideways reference in https://napari.org/0.4.18/gallery/mouse_drag_callback.html# and another in
+            # https://github.com/napari/napari/issues/3246#issuecomment-905803916 which mentions a generator being expected for the callback.
+            # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
+            event.handled = True
+            yield
+            
+        assert event.type == "mouse_release"
+        event.handled = True
+
 
     def _default_generic_calibration_layers(self):
 
