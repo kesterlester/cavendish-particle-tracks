@@ -34,7 +34,7 @@ from ._decay_angles_dialog import DecayAnglesDialog
 from ._magnification_dialog import MagnificationDialog
 from ._settings import get_bypass, get_shuffling_seed
 from ._stereoshift_dialog import StereoshiftDialog
-from ._calibrations import CalibrationManager
+from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PARTICLES, VIEW_NAMES, ParticleDecay
 
