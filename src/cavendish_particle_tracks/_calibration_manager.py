@@ -233,6 +233,92 @@ class CalibrationManager:
         # CTRL as a modifier for left-click!  Note that add-to-selection in mac is CMD-left-click, so no
         # conflict with that.
 
+        # Mouse events are defined in here https://github.com/vispy/vispy/blob/main/vispy/app/canvas.py
+
+        """
+        A traceback during a mouse event
+
+      (venv) Gorfrog-MacWheird:cavendish-particle-tracks lester$   File "/Users/lester/github/cavendish-particle-tracks/./launch_debug.py", line 25, in <module>
+    run()
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_qt/qt_event_loop.py", line 469, in run
+    app.exec_()
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/backends/_qt.py", line 626, in event
+    out = super(QtBaseCanvasBackend, self).event(ev)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/backends/_qt.py", line 496, in mousePressEvent
+    self._vispy_mouse_press(
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/base.py", line 184, in _vispy_mouse_press
+    ev = self._vispy_canvas.events.mouse_press(**kwargs)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/util/event.py", line 453, in __call__
+    self._invoke_callback(cb, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/util/event.py", line 469, in _invoke_callback
+    cb(event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_vispy/canvas.py", line 470, in _on_mouse_press
+    self._process_mouse_event(mouse_press_callbacks, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_vispy/canvas.py", line 413, in _process_mouse_event
+    mouse_callbacks(self.viewer, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/utils/interactions.py", line 125, in mouse_press_callbacks
+    gen = mouse_drag_func(obj, event)
+  File "/var/folders/xh/gkx93pyn2xl5jh11l4xwgcgr0000gn/T/ipykernel_68550/2820818860.py", line 5, in store
+    traceback.print_stack()
+
+
+
+
+
+     Here is another traceback during a mouse press handler that YIELDS after processing the press, and then receives a RELEASE:
+
+
+     (venv) Gorfrog-MacWheird:cavendish-particle-tracks lester$ HELLO i=0
+  File "/Users/lester/github/cavendish-particle-tracks/./launch_debug.py", line 25, in <module>
+    run()
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_qt/qt_event_loop.py", line 469, in run
+    app.exec_()
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/backends/_qt.py", line 626, in event
+    out = super(QtBaseCanvasBackend, self).event(ev)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/backends/_qt.py", line 496, in mousePressEvent
+    self._vispy_mouse_press(
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/base.py", line 184, in _vispy_mouse_press
+    ev = self._vispy_canvas.events.mouse_press(**kwargs)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/util/event.py", line 453, in __call__
+    self._invoke_callback(cb, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/util/event.py", line 469, in _invoke_callback
+    cb(event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_vispy/canvas.py", line 470, in _on_mouse_press
+    self._process_mouse_event(mouse_press_callbacks, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_vispy/canvas.py", line 413, in _process_mouse_event
+    mouse_callbacks(self.viewer, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/utils/interactions.py", line 129, in mouse_press_callbacks
+    next(gen)
+  File "/var/folders/xh/gkx93pyn2xl5jh11l4xwgcgr0000gn/T/ipykernel_68550/740299691.py", line 7, in store
+    traceback.print_stack()
+Before event.type='mouse_press' event.button=2
+yielding
+HELLO i=1
+  File "/Users/lester/github/cavendish-particle-tracks/./launch_debug.py", line 25, in <module>
+    run()
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_qt/qt_event_loop.py", line 469, in run
+    app.exec_()
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/backends/_qt.py", line 626, in event
+    out = super(QtBaseCanvasBackend, self).event(ev)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/backends/_qt.py", line 506, in mouseReleaseEvent
+    self._vispy_mouse_release(
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/app/base.py", line 224, in _vispy_mouse_release
+    ev = self._vispy_canvas.events.mouse_release(**kwargs)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/util/event.py", line 453, in __call__
+    self._invoke_callback(cb, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/vispy/util/event.py", line 469, in _invoke_callback
+    cb(event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_vispy/canvas.py", line 484, in _on_mouse_release
+    self._process_mouse_event(mouse_release_callbacks, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/_vispy/canvas.py", line 413, in _process_mouse_event
+    mouse_callbacks(self.viewer, event)
+  File "/Users/lester/github/cavendish-particle-tracks/venv/lib/python3.12/site-packages/napari/utils/interactions.py", line 216, in mouse_release_callbacks
+    next(gen)
+  File "/var/folders/xh/gkx93pyn2xl5jh11l4xwgcgr0000gn/T/ipykernel_68550/740299691.py", line 7, in store
+    traceback.print_stack()
+After event.type='mouse_release' event.button=2
+
+        """
         if event.button == 2:  # right-click!  Testing for mouse_release not mouse_press due to napari/qt bug that means that canas gets stuck in drag mode
 
             print(f"Before {event.type=} {event.button=}")
@@ -321,10 +407,10 @@ class CalibrationManager:
 
             """
             We can't just call show_drop_down_menu() in the next line as it 
-            results in our capuring the right click by hiding the 
+            results in our capturing the right click by hiding the 
             right mouse button RELEASE.  So we do this instead:
             """
-            QTimer.singleShot(100, lambda: show_drop_down_menu(type))
+            QTimer.singleShot(0, lambda: show_drop_down_menu(type))
 
     def _default_generic_calibration_layers(self):
 
