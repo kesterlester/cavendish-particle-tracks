@@ -217,11 +217,10 @@ class CalibrationManager:
             layer.refresh()
 
     def on_mouse(self, layer, event):
-        #print(f"Detected mouse event {event} on layer {layer}")
-        #print(f"WAS mouse button {event.button} with type {event.type} on layer {layer}")
-        #print("thing MBR ", QMouseEvent.MouseButtonRelease)
-        #print("thing L-BU ", Qt.MouseButton.LeftButton)
-        #print("thing R-BU ", Qt.MouseButton.RightButton)
+        # This implements a right-click response to a point in a generic calibration layer.
+        # Note that on mac CTRL-left-click is a synonym for vanilla right-click, so don't expect to be able to use
+        # CTRL as a modifier for left-click!  Note that add-to-selection in mac is CMD-left-click, so no
+        # conflict with that.
         if event.button == 2:
             coords = layer.world_to_data(event.position)
             print(f"coords = {coords}")
@@ -232,8 +231,6 @@ class CalibrationManager:
             i = ind
 
             type = layer.properties["types"][i]
-
-            #print(f" got 1 and type {type}")
 
             def show_menu(type):
                 # build popup menu
