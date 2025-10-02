@@ -411,17 +411,9 @@ After event.type='mouse_release' event.button=2
                 menu.addAction(clone_into_current_image_menu_item)
 
             # popup at cursor position
-            menu.exec_(pos)  # use captured global cursor pos -- see (*) below
+            menu.exec_(event.native.globalPos())
 
-        # capture cursor now
-        pos = QCursor.pos()  # (*)
-
-        """
-        We can't just call show_drop_down_menu() in the next line as it 
-        results in our capturing the right click by hiding the 
-        right mouse button RELEASE.  So we do this instead:
-        """
-        QTimer.singleShot(0, lambda: show_drop_down_menu(type))
+        show_drop_down_menu(type)
 
     def _default_generic_calibration_layers(self):
 
