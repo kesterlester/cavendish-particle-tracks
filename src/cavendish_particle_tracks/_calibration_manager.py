@@ -319,98 +319,109 @@ HELLO i=1
 After event.type='mouse_release' event.button=2
 
         """
-        if event.button == 2:  # right-click!  Testing for mouse_release not mouse_press due to napari/qt bug that means that canas gets stuck in drag mode
+        our_sort_of_event = event.type == "mouse_press" and event.button == 2
 
-            print(f"Before {event.type=} {event.button=}")
-            if event.type == "mouse_press":
-                # Wait until mouse button release
-                print("yielding")
-                yield
-            print(f"After {event.type=} {event.button=}")
+        if not our_sort_of_event:
+            event.ignore()
+            return
 
-            coords = layer.world_to_data(event.position)
-            #print(f"coords = {coords}")
-            index_of_nearest_point = layer.get_value(coords, world=True)
-            #print(f"index_of_nearest_point is {index_of_nearest_point}")
-            if index_of_nearest_point is None:
-                # This was not a right-click on a point.
-                return
+        assert our_sort_of_event
 
-            i = index_of_nearest_point  # Just abbreviation shorthand.
+        # Record position at mouse down (not at mouse up which could be different if there was a drag inbetween):
+        coords = layer.world_to_data(event.position)
 
-            type = layer.properties["types"][i]
+        # Wait for release:
+        while event.type != "mouse_release":
+            # use of yield explained in https://forum.image.sc/t/custom-mouse-shortcuts-to-help-creating-labels-in-napari/70930/6
+            # There is also a sideways reference in https://napari.org/0.4.18/gallery/mouse_drag_callback.html# and another in
+            # https://github.com/napari/napari/issues/3246#issuecomment-905803916 which mentions a generator being expected for the callback.
+            # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
+            yield
 
-            def show_drop_down_menu(type):
-                # build popup menu
-                menu = QMenu(self.viewer.window._qt_window)
+        assert event.type == "mouse_release"
 
-                header = QAction("Set name:", menu)
-                header.setEnabled(False)  # makes it unclickable
-                font = header.font()
-                font.setBold(True)
-                header.setFont(font)
-                menu.addAction(header)
+        # We can now make the menu appear:
+
+        index_of_nearest_point = layer.get_value(coords, world=True)
+        if index_of_nearest_point is None:
+            # This was not a right-click on a point.
+            return
+
+        i = index_of_nearest_point  # Just abbreviation shorthand.
+
+        type = layer.properties["types"][i]
+
+        def show_drop_down_menu(type):
+            # build popup menu
+            menu = QMenu(self.viewer.window._qt_window)
+
+            header = QAction("Set name:", menu)
+            header.setEnabled(False)  # makes it unclickable
+            font = header.font()
+            font.setBold(True)
+            header.setFont(font)
+            menu.addAction(header)
+            menu.addSeparator()
+
+            from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
+
+            if type == "front":
+                fixed_names = list(FIDUCIAL_FRONT.keys())
+            elif type == "back":
+                fixed_names = list(FIDUCIAL_BACK.keys())
+            else:
+                fixed_names = ["point"]
+
+            # add fixed names
+            for fname in fixed_names:
+                act = QAction(fname, menu)
+                act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
+                menu.addAction(act)
+
+            type_is_fiducial = type in ["front", "back"]
+
+            if not type_is_fiducial:
+                # "no name" entry
+                noname = QAction("❌ Delete name", menu)
+                noname.triggered.connect(lambda _: self.rename_point(i, "", type))
+                menu.addAction(noname)
+
+                # custom name entry
+                def custom_name_calback():
+                    text, ok = QInputDialog.getText(
+                        self.viewer.window._qt_window,
+                        "Custom name",
+                        "Enter name:",
+                    )
+                    if ok and text.strip():
+                        self.rename_point(i, text.strip(), type)
+
                 menu.addSeparator()
+                custom_name_menu_item = QAction("Set custom name ...", menu)
+                custom_name_menu_item.triggered.connect(custom_name_calback)
+                menu.addAction(custom_name_menu_item)
 
-                from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
+            if type_is_fiducial:
+                def clone_into_current_image_callback():
+                    pass
 
-                if type == "front":
-                    fixed_names = list(FIDUCIAL_FRONT.keys())
-                elif type == "back":
-                    fixed_names = list(FIDUCIAL_BACK.keys())
-                else:
-                    fixed_names = ["point"]
+                menu.addSeparator()
+                clone_into_current_image_menu_item = QAction("Save for this event ...", menu)
+                clone_into_current_image_menu_item.triggered.connect(clone_into_current_image_callback)
+                menu.addAction(clone_into_current_image_menu_item)
 
-                # add fixed names
-                for fname in fixed_names:
-                    act = QAction(fname, menu)
-                    act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
-                    menu.addAction(act)
+            # popup at cursor position
+            menu.exec_(pos)  # use captured global cursor pos -- see (*) below
 
-                type_is_fiducial = type in ["front", "back"]
+        # capture cursor now
+        pos = QCursor.pos()  # (*)
 
-                if not type_is_fiducial:
-                    # "no name" entry
-                    noname = QAction("❌ Delete name", menu)
-                    noname.triggered.connect(lambda _: self.rename_point(i, "", type))
-                    menu.addAction(noname)
-
-                    # custom name entry
-                    def custom_name_calback():
-                        text, ok = QInputDialog.getText(
-                            self.viewer.window._qt_window,
-                            "Custom name",
-                            "Enter name:",
-                        )
-                        if ok and text.strip():
-                            self.rename_point(i, text.strip(), type)
-
-                    menu.addSeparator()
-                    custom_name_menu_item = QAction("Set custom name ...", menu)
-                    custom_name_menu_item.triggered.connect(custom_name_calback)
-                    menu.addAction(custom_name_menu_item)
-
-                if type_is_fiducial:
-                    def clone_into_current_image_callback():
-                        pass
-
-                    menu.addSeparator()
-                    clone_into_current_image_menu_item = QAction("Save for this event ...", menu)
-                    clone_into_current_image_menu_item.triggered.connect(clone_into_current_image_callback)
-                    menu.addAction(clone_into_current_image_menu_item)
-
-                # popup at cursor position
-                menu.exec_(pos)  # use captured global cursor pos -- see (*) below
-
-            # capture cursor now
-            pos = QCursor.pos()  # (*)
-
-            """
-            We can't just call show_drop_down_menu() in the next line as it 
-            results in our capturing the right click by hiding the 
-            right mouse button RELEASE.  So we do this instead:
-            """
-            QTimer.singleShot(0, lambda: show_drop_down_menu(type))
+        """
+        We can't just call show_drop_down_menu() in the next line as it 
+        results in our capturing the right click by hiding the 
+        right mouse button RELEASE.  So we do this instead:
+        """
+        QTimer.singleShot(0, lambda: show_drop_down_menu(type))
 
     def _default_generic_calibration_layers(self):
 
