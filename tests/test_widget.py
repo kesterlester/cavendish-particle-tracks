@@ -35,7 +35,7 @@ def test_open_widget(make_napari_viewer, bypass, docking_area):
     # Check the widget behavior before and after loading the data
     assert widget.particle_decays_menu.isEnabled() is False
     assert widget.radius_button.isEnabled() is False
-    assert widget.delete_particle.isEnabled() is False
+    assert widget.delete_process.isEnabled() is False
     assert widget.length_button.isEnabled() is False
     assert widget.stereoshift_button.isEnabled() is False
     assert widget.magnification_button.isEnabled() is False
@@ -45,7 +45,7 @@ def test_open_widget(make_napari_viewer, bypass, docking_area):
 
     assert widget.particle_decays_menu.isEnabled() is True
     assert widget.radius_button.isEnabled() is False
-    assert widget.delete_particle.isEnabled() is False
+    assert widget.delete_process.isEnabled() is False
     assert widget.length_button.isEnabled() is False
     assert widget.stereoshift_button.isEnabled() is False
     assert widget.magnification_button.isEnabled() is True
@@ -75,7 +75,7 @@ def test_delete_particle_ui(cpt_widget: ParticleTracksWidget):
 
     # Open and retrieve file dialog
     get_dialog(
-        dialog_trigger=cpt_widget._on_click_delete_particle,
+        dialog_trigger=cpt_widget._on_click_delete_process,
         dialog_action=close_dialog,
         time_out=5,
     )
@@ -188,17 +188,17 @@ def test_show_hide_buttons(cpt_widget: ParticleTracksWidget):
     # ideally would like to test isVisible instead of isEnabled, but that requires showing the widget
     # need to think about how to do that, or if it's worth it
     assert cpt_widget.particle_decays_menu.isEnabled() is True
-    assert cpt_widget.delete_particle.isEnabled() is False
+    assert cpt_widget.delete_process.isEnabled() is False
     assert cpt_widget.radius_button.isEnabled() is False
     assert cpt_widget.length_button.isEnabled() is False
     assert cpt_widget.decay_angles_button.isEnabled() is False
     cpt_widget.particle_decays_menu.setCurrentIndex(1)
-    assert cpt_widget.delete_particle.isEnabled() is True
+    assert cpt_widget.delete_process.isEnabled() is True
     assert cpt_widget.radius_button.isEnabled() is True
     assert cpt_widget.length_button.isEnabled() is True
     assert cpt_widget.decay_angles_button.isEnabled() is False
     cpt_widget.particle_decays_menu.setCurrentIndex(4)
-    assert cpt_widget.delete_particle.isEnabled() is True
+    assert cpt_widget.delete_process.isEnabled() is True
     assert cpt_widget.radius_button.isEnabled() is False
     assert cpt_widget.length_button.isEnabled() is True
     assert cpt_widget.decay_angles_button.isEnabled() is True

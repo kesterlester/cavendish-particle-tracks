@@ -89,7 +89,7 @@ class ParticleTracksWidget(QWidget):
         self.particle_decays_menu.setCurrentIndex(0)
         self.particle_decays_menu.currentIndexChanged.connect(self._on_click_new_particle)
         self.radius_button = QPushButton("Calculate radius")
-        self.delete_particle = QPushButton("Delete particle")
+        self.delete_process = QPushButton("Delete process")
         self.length_button = QPushButton("Calculate length")
         self.decay_angles_button = QPushButton("Calculate decay angles")
         self.stereoshift_button = QPushButton("Stereoshift")
@@ -108,7 +108,7 @@ class ParticleTracksWidget(QWidget):
 
         # connect callbacks
         self.load_button.clicked.connect(self._on_click_load_data)
-        self.delete_particle.clicked.connect(self._on_click_delete_particle)
+        self.delete_process.clicked.connect(self._on_click_delete_process)
         self.radius_button.clicked.connect(self._on_click_radius)
         self.length_button.clicked.connect(self._on_click_length)
         self.decay_angles_button.clicked.connect(self._on_click_decay_angles)
@@ -119,7 +119,7 @@ class ParticleTracksWidget(QWidget):
         self.save_data_button.clicked.connect(self._on_click_save)
 
         self.magnification_button.clicked.connect(self._on_click_magnification)
-        # TODO: find which of thsese works
+        # TODO: find which of these works
         # https://napari.org/stable/gallery/custom_mouse_functions.html
         # self.viewer.mouse_press.callbacks.connect(self._on_mouse_press)
         # self.viewer.events.mouse_press(self._on_mouse_click)
@@ -128,7 +128,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox = QGridLayout()
             self.buttonbox.addWidget(self.load_button, 0, 0)
             self.buttonbox.addWidget(self.particle_decays_menu, 1, 0)
-            self.buttonbox.addWidget(self.delete_particle, 1, 1)
+            self.buttonbox.addWidget(self.delete_process, 1, 1)
             self.buttonbox.addWidget(self.radius_button, 2, 0)
             self.buttonbox.addWidget(self.length_button, 2, 1)
             self.buttonbox.addWidget(self.decay_angles_button, 3, 0)
@@ -146,7 +146,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox = QVBoxLayout()
             self.buttonbox.addWidget(self.load_button)
             self.buttonbox.addWidget(self.particle_decays_menu)
-            self.buttonbox.addWidget(self.delete_particle)
+            self.buttonbox.addWidget(self.delete_process)
             self.buttonbox.addWidget(self.radius_button)
             self.buttonbox.addWidget(self.length_button)
             self.buttonbox.addWidget(self.decay_angles_button)
@@ -273,7 +273,7 @@ class ParticleTracksWidget(QWidget):
         try:
             selected_row = self._get_selected_row()
             self.save_data_button.setEnabled(True)
-            self.delete_particle.setEnabled(True)
+            self.delete_process.setEnabled(True)
             ## think about these two + cal once done.
             self.magnification_button.setEnabled(True)
             self.stereoshift_button.setEnabled(True)
@@ -288,7 +288,7 @@ class ParticleTracksWidget(QWidget):
                 self.decay_angles_button.setEnabled(True)
                 return
         except IndexError:
-            self.delete_particle.setEnabled(False)
+            self.delete_process.setEnabled(False)
             self.radius_button.setEnabled(False)
             self.length_button.setEnabled(False)
             self.decay_angles_button.setEnabled(False)
@@ -307,7 +307,7 @@ class ParticleTracksWidget(QWidget):
         else:
             self.load_button.setEnabled(True)
             self.particle_decays_menu.setEnabled(False)
-            self.delete_particle.setEnabled(False)
+            self.delete_process.setEnabled(False)
             self.radius_button.setEnabled(False)
             self.length_button.setEnabled(False)
             self.decay_angles_button.setEnabled(False)
@@ -663,7 +663,7 @@ class ParticleTracksWidget(QWidget):
         print(self.data[-1])
         self.particle_decays_menu.setCurrentIndex(0)
 
-    def _on_click_delete_particle(self) -> None:
+    def _on_click_delete_process(self) -> None:
         """Delete particle from table and data"""
         try:
             selected_row = self._get_selected_row()
