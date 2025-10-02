@@ -78,6 +78,8 @@ class CalibrationManager:
         self._setup_callbacks()
 
     def event_calibration_layer(self) -> napari.layers.Points:
+        # TODO: This could break if the user first created a layer with exactly the right name before we construct.
+        # Maybe should not reference by NAME but keep a reference.
         if PER_IMAGE_CALIBRATION_LAYER_NAME in self.parent.viewer.layers:
             # Layer already exists, so just return it:
             return self.parent.viewer.layers[PER_IMAGE_CALIBRATION_LAYER_NAME]
