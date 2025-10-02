@@ -5,7 +5,6 @@ from napari.layers import Points
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QGridLayout,
     QLabel,
@@ -15,6 +14,7 @@ from qtpy.QtWidgets import (
 )
 
 from ._calculate import magnification
+from ._calibration_manager import PER_IMAGE_CALIBRATION_LAYER_NAME
 from .non_overlapping_dialog import NonOverlappingQDialog
 from .analysis import (
     FIDUCIAL_BACK,
@@ -25,16 +25,9 @@ from .analysis import (
 if TYPE_CHECKING:
     from ._main_widget import ParticleTracksWidget
 
-
-MAGNIFICATION_LAYER_NAME = "Magnification"
-
-
 class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
     def __init__(self, parent):
-        # super().__init__(parent)  # Call QDialog constructor
-        # self.setWindowTitle("Magnification")
-
-        super().__init__(tokens=["controls_calibration_layers"], parent=parent, title="Magnification")
+        super().__init__(tokens=["controls_calibration_layers"], parent=parent, title="Calibration")
         self.parent: ParticleTracksWidget = parent
 
         self.f1 = Fiducial()
@@ -47,12 +40,11 @@ class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
         self.magnification_layer = self.create_or_retrieve_magnification_layer()
 
     def create_or_retrieve_magnification_layer(self) -> Points:
-        if MAGNIFICATION_LAYER_NAME in self.parent.viewer.layers:
-            return self.parent.viewer.layers[MAGNIFICATION_LAYER_NAME]
-        return self.parent.viewer.add_points(name=MAGNIFICATION_LAYER_NAME)
+        if PER_IMAGE_CALIBRATION_LAYER_NAME in self.parent.viewer.layers:
+            return self.parent.viewer.layers[PER_IMAGE_CALIBRATION_LAYER_NAME]
+        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME)
 
     def ui_setup(self):
-        self.setWindowTitle("Magnification")
         # Drop-down selection of Fiducials
         self.front1_fiducial_combobox = self._setup_dropdown_fiducials_combobox()
         self.front2_fiducial_combobox = self._setup_dropdown_fiducials_combobox()

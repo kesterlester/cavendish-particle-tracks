@@ -93,7 +93,7 @@ class ParticleTracksWidget(QWidget):
         self.length_button = QPushButton("Calculate length")
         self.decay_angles_button = QPushButton("Calculate decay angles")
         self.stereoshift_button = QPushButton("Stereoshift")
-        self.magnification_button = QPushButton("Magnification")
+        self.magnification_button = QPushButton("Scale Calibration")
         self.save_data_button = QPushButton("Save")
 
         # setup particle table

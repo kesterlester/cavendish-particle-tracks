@@ -45,7 +45,8 @@ dialog ... so the above may change.
 """
 
 view_indices = (0, 1, 2)
-names_of_generic_calibration_layers = [f"Calibration workspace for view {v}" for v in view_indices]
+GENERIC_CALIBRATION_LAYER_NAMES = [f"Calibration (generic; camera {v + 1})" for v in view_indices]
+PER_IMAGE_CALIBRATION_LAYER_NAME = "Calibration (per-image)"
 
 
 class CalibrationManager:
@@ -436,7 +437,7 @@ class CalibrationManager:
         }
         layer = napari.layers.Points(
             points,
-            name=names_of_generic_calibration_layers[view_index],
+            name=GENERIC_CALIBRATION_LAYER_NAMES[view_index],
             # size=20,
             ### size=symbol_sizes,
             properties=props,
