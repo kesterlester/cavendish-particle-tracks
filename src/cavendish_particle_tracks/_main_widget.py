@@ -118,7 +118,7 @@ class ParticleTracksWidget(QWidget):
         )
         self.save_data_button.clicked.connect(self._on_click_save)
 
-        self.image_calibration_button.clicked.connect(self._on_click_magnification)
+        self.image_calibration_button.clicked.connect(self._on_click_calibration)
         # TODO: find which of these works
         # https://napari.org/stable/gallery/custom_mouse_functions.html
         # self.viewer.mouse_press.callbacks.connect(self._on_mouse_press)
@@ -681,7 +681,7 @@ class ParticleTracksWidget(QWidget):
                 del self.data[selected_row]
                 self.table.removeRow(selected_row)
 
-    def _on_click_magnification(self) -> MagnificationDialog:
+    def _on_click_calibration(self) -> MagnificationDialog:
         """When the 'Calculate magnification' button is clicked, open the magnification dialog"""
         if self.mag_dlg is not None:
             self.mag_dlg.show()

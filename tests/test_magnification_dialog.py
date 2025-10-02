@@ -11,7 +11,7 @@ from cavendish_particle_tracks.analysis import Fiducial
 def test_open_and_close_magnification_dialog(cpt_widget):
     """Test the expected behavior from the expected workflow:"""
     # open the dialog
-    cpt_widget._on_click_magnification()
+    cpt_widget._on_click_calibration()
     assert cpt_widget.mag_dlg.isVisible()
     assert MAGNIFICATION_LAYER_NAME in cpt_widget.viewer.layers
     assert cpt_widget.mag_dlg.magnification_layer.visible
@@ -23,7 +23,7 @@ def test_open_and_close_magnification_dialog(cpt_widget):
     assert not cpt_widget.mag_dlg.magnification_layer.visible
 
     # Click again to test that the dialog opens again
-    cpt_widget._on_click_magnification()
+    cpt_widget._on_click_calibration()
     assert cpt_widget.mag_dlg.isVisible()
     assert MAGNIFICATION_LAYER_NAME in cpt_widget.viewer.layers
     assert cpt_widget.mag_dlg.magnification_layer.visible
@@ -73,8 +73,8 @@ def test_magnification_ui(
     """
     # The user opens the child dialog (also test fringe case that they click the button again).
     if click_twice:
-        cpt_widget._on_click_magnification()
-    dlg = cpt_widget._on_click_magnification()
+        cpt_widget._on_click_calibration()
+    dlg = cpt_widget._on_click_calibration()
 
     # add fiducials
     fiducials = [
@@ -117,7 +117,7 @@ def test_magnification_ui(
         assert recorded_fiducial == fiducial
         # TODO: check text box
 
-    dlg._on_click_magnification()
+    dlg._on_click_calibration()
     assert dlg.a == pytest.approx(expected_magnification_params[0], rel=1e-3)
     assert dlg.b == pytest.approx(expected_magnification_params[1], rel=1e-3)
 
@@ -132,7 +132,7 @@ def test_magnification_ui(
 def test_magnification_cancel(cpt_widget):
     """Tests magnification parameters are not updated when clicking the cancel button."""
 
-    dlg = cpt_widget._on_click_magnification()
+    dlg = cpt_widget._on_click_calibration()
 
     pre_mag_a = cpt_widget.mag_a
     pre_mag_b = cpt_widget.mag_b
