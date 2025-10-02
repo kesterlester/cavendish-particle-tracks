@@ -228,7 +228,7 @@ class CalibrationManager:
             layer.refresh()
 
     def on_mouse(self, layer, event):
-        # This implements a right-click response to a point in a generic calibration layer.
+        # This implements a right-click drop-down menu in response to a point in a generic calibration layer.
         # Note that on mac CTRL-left-click is a synonym for vanilla right-click, so don't expect to be able to use
         # CTRL as a modifier for left-click!  Note that add-to-selection in mac is CMD-left-click, so no
         # conflict with that.
@@ -246,11 +246,11 @@ class CalibrationManager:
 
             type = layer.properties["types"][i]
 
-            def show_menu(type):
+            def show_drop_down_menu(type):
                 # build popup menu
                 menu = QMenu(self.viewer.window._qt_window)
 
-                header = QAction("Set name", menu)
+                header = QAction("Set name:", menu)
                 header.setEnabled(False)  # makes it unclickable
                 font = header.font()
                 font.setBold(True)
@@ -282,7 +282,7 @@ class CalibrationManager:
                     menu.addAction(noname)
 
                     # custom name entry
-                    def custom_name():
+                    def custom_name_calback():
                         text, ok = QInputDialog.getText(
                             self.viewer.window._qt_window,
                             "Custom name",
@@ -292,9 +292,18 @@ class CalibrationManager:
                             self.rename_point(i, text.strip(), type)
 
                     menu.addSeparator()
-                    custom = QAction("Custom name ...", menu)
-                    custom.triggered.connect(custom_name)
-                    menu.addAction(custom)
+                    custom_name_menu_item = QAction("Set custom name ...", menu)
+                    custom_name_menu_item.triggered.connect(custom_name_calback)
+                    menu.addAction(custom_name_menu_item)
+
+                if type_is_fiducial:
+                    def clone_into_current_image_callback():
+                        pass
+
+                    menu.addSeparator()
+                    clone_into_current_image_menu_item = QAction("Save for this event ...", menu)
+                    clone_into_current_image_menu_item.triggered.connect(clone_into_current_image_callback)
+                    menu.addAction(clone_into_current_image_menu_item)
 
                 # popup at cursor position
                 menu.exec_(pos)  # use captured global cursor pos -- see (*) below
@@ -303,11 +312,11 @@ class CalibrationManager:
             pos = QCursor.pos()  # (*)
 
             """
-            We can't just call show_menu() in the next line as it 
+            We can't just call show_drop_down_menu() in the next line as it 
             results in our capuring the right click by hiding the 
             right mouse button RELEASE.  So we do this instead:
             """
-            QTimer.singleShot(100, lambda: show_menu(type))
+            QTimer.singleShot(100, lambda: show_drop_down_menu(type))
 
     def _default_generic_calibration_layers(self):
 
