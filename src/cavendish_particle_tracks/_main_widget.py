@@ -31,7 +31,7 @@ from qtpy.QtWidgets import (
 
 from ._calculate import length, radius
 from ._decay_angles_dialog import DecayAnglesDialog
-from ._image_calibration_dialog import MagnificationDialog
+from ._image_calibration_dialog import ImageCalibrationDialog
 from ._settings import get_bypass, get_shuffling_seed
 from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
@@ -178,7 +178,7 @@ class ParticleTracksWidget(QWidget):
         self.mag_b = 0.0
 
         # Dialog pointers to reuse
-        self.mag_dlg: MagnificationDialog | None = None
+        self.mag_dlg: ImageCalibrationDialog | None = None
         self.stereoshift_dlg: StereoshiftDialog | None = None
         self.decay_angles_dlg: DecayAnglesDialog | None = None
 
@@ -681,14 +681,14 @@ class ParticleTracksWidget(QWidget):
                 del self.data[selected_row]
                 self.table.removeRow(selected_row)
 
-    def _on_click_calibration(self) -> MagnificationDialog:
+    def _on_click_calibration(self) -> ImageCalibrationDialog:
         """When the 'Calculate magnification' button is clicked, open the magnification dialog"""
         if self.mag_dlg is not None:
             self.mag_dlg.show()
             self.mag_dlg.raise_()
             self._activate_calibration_layer(self.mag_dlg.magnification_layer)
             return self.mag_dlg
-        self.mag_dlg = MagnificationDialog(self)
+        self.mag_dlg = ImageCalibrationDialog(self)
         self.mag_dlg.show()
         self.mag_dlg.raise_()
         return self.mag_dlg

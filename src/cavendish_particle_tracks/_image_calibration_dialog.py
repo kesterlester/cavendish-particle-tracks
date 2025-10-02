@@ -25,7 +25,7 @@ from .analysis import (
 if TYPE_CHECKING:
     from ._main_widget import ParticleTracksWidget
 
-class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
+class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
     def __init__(self, parent):
         super().__init__(tokens=["controls_calibration_layers"], parent=parent, title="Image Calibration")
         self.parent: ParticleTracksWidget = parent
