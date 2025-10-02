@@ -221,7 +221,8 @@ class CalibrationManager:
         # Note that on mac CTRL-left-click is a synonym for vanilla right-click, so don't expect to be able to use
         # CTRL as a modifier for left-click!  Note that add-to-selection in mac is CMD-left-click, so no
         # conflict with that.
-        if event.button == 2:
+
+        if event.button == 2:  # right-click!
             coords = layer.world_to_data(event.position)
             print(f"coords = {coords}")
             ind = layer.get_value(coords, world=True)
