@@ -1,3 +1,7 @@
 Move most simple messages to the same format used after successful file save: napari.utils.notifications.show_info("Data saved to " + file_name)
 
 At present one is not allowed to save data when the table is empty (no data) ... even though the "you have unsaved data" may trigger if there were previous rows that have since been deleted. Getting rid of the inability to save empty data would be good!
+
+At the moment you can clone all forms of A' (i.e. all three views) into the event, but this may not be what you want to do!  You may only want to do it for THIS view!
+
+Points in the event layer don't scale with view when the image calibration dialog box is closed.

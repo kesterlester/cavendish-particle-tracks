@@ -84,7 +84,7 @@ class CalibrationManager:
             # Layer already exists, so just return it:
             return self.parent.viewer.layers[PER_IMAGE_CALIBRATION_LAYER_NAME]
         # Layer does not already exist, so construct and return it:
-        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME, visible=False)
+        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME, ndim=4, visible=False)
 
     def _setup_callbacks(self):
         for layer in self.generic_calibration_layers():
@@ -208,6 +208,7 @@ class CalibrationManager:
             desired_state =  (i == current_view)
             if layer.visible != desired_state: # Avoid generating unnecessary triggers:
                 layer.visible = desired_state
+                layer.mode = "select"
 
     def _refresh_visibility_and_focus_of_all_calibration_layers(self):
         if self._calibration_layer_visibility:
@@ -215,13 +216,23 @@ class CalibrationManager:
             self.event_calibration_layer().visible = True
         else:
             self._hide_generic_calibration_layers()
-            self.event_calibration_layer().visible = False
+            # Don't automatically hide the event layer:
+            # No harm in user having control over whether it is seen or not.
+            # self.event_calibration_layer().visible = False
 
     def clone_fid_into_event(self, idx, name):
         print(f"About to clone generic fiducial {idx=} with {name=} into event.")
-        for view, layer in enumerate(self.generic_calibration_layers()):
+        for view, layer_for_view in enumerate(self.generic_calibration_layers()):
             current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
-            fiducial_coords_in_this_layer = layer.data[idx]
+            xy = layer_for_view.data[idx]
+
+            # Extend xy coords to 4D by adding view and event:
+            fiducial_coords_4d_for_this_fiducial_in_view = [view, current_event, xy[0], xy[1]]
+
+            destination_layer = self.event_calibration_layer()
+            destination_layer.current_symbol = "disc"
+            destination_layer.current_text = name
+            destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
 
 
     def rename_point(self, idx, name, type):
@@ -349,16 +360,14 @@ After event.type='mouse_release' event.button=2
         # Record position at mouse down (not at mouse up which could be different if there was a drag inbetween):
         coords = layer.world_to_data(event.position)
 
-        #### WAIT FOR RELEASE HERE OR BELOW
-
-        ## Wait for release:
-        #while event.type != "mouse_release":
-        #    # use of yield explained in https://forum.image.sc/t/custom-mouse-shortcuts-to-help-creating-labels-in-napari/70930/6
-        #    # There is also a sideways reference in https://napari.org/0.4.18/gallery/mouse_drag_callback.html# and another in
-        #    # https://github.com/napari/napari/issues/3246#issuecomment-905803916 which mentions a generator being expected for the callback.
-        #    # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
-        #    yield
-        #assert event.type == "mouse_release"
+        # Wait for release:
+        while event.type != "mouse_release":
+            # use of yield explained in https://forum.image.sc/t/custom-mouse-shortcuts-to-help-creating-labels-in-napari/70930/6
+            # There is also a sideways reference in https://napari.org/0.4.18/gallery/mouse_drag_callback.html# and another in
+            # https://github.com/napari/napari/issues/3246#issuecomment-905803916 which mentions a generator being expected for the callback.
+            # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
+            yield
+        assert event.type == "mouse_release"
 
         # We can now make the menu appear:
 
@@ -441,23 +450,8 @@ After event.type='mouse_release' event.button=2
             # popup at cursor position
             menu.exec_(event.native.globalPos())
 
-
         show_drop_down_menu(type)
-
-        #### WAIT FOR RELEASE HERE OR ABOVE
-
-        # Wait for release:
-        while event.type != "mouse_release":
-            # use of yield explained in https://forum.image.sc/t/custom-mouse-shortcuts-to-help-creating-labels-in-napari/70930/6
-            # There is also a sideways reference in https://napari.org/0.4.18/gallery/mouse_drag_callback.html# and another in
-            # https://github.com/napari/napari/issues/3246#issuecomment-905803916 which mentions a generator being expected for the callback.
-            # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
-            event.handled = True
-            yield
-
-        assert event.type == "mouse_release"
         event.handled = True
-
 
     def _default_generic_calibration_layers(self):
 
