@@ -204,8 +204,8 @@ class CalibrationManager:
         else:
             self._hide_calibration_layers()
 
-    def clone_fid_into_event(self, idx, name, coords):
-        print(f"About to clone generic fiducial {idx=} with {name=} and {coords=} into event.")
+    def clone_fid_into_event(self, idx, name):
+        print(f"About to clone generic fiducial {idx=} with {name=} into event.")
         pass
 
     def rename_point(self, idx, name, type):
@@ -356,7 +356,6 @@ After event.type='mouse_release' event.button=2
 
         type = layer.properties["types"][i]
         name = layer.properties["labels"][i]
-        coords = "[NOT YET IMPLEMENTED COORDS]"
 
         def show_drop_down_menu(type):
             # build popup menu
@@ -420,7 +419,7 @@ After event.type='mouse_release' event.button=2
 
                 menu.addSeparator()
                 clone_into_current_image_menu_item = QAction("Insert into this specific event ...", menu)
-                clone_into_current_image_menu_item.triggered.connect(lambda _: self.clone_fid_into_event(i, name, coords))
+                clone_into_current_image_menu_item.triggered.connect(lambda _: self.clone_fid_into_event(i, name))
                 menu.addAction(clone_into_current_image_menu_item)
 
             # popup at cursor position
