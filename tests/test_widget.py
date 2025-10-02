@@ -38,7 +38,7 @@ def test_open_widget(make_napari_viewer, bypass, docking_area):
     assert widget.delete_process.isEnabled() is False
     assert widget.length_button.isEnabled() is False
     assert widget.stereoshift_button.isEnabled() is False
-    assert widget.magnification_button.isEnabled() is False
+    assert widget.image_calibration_button.isEnabled() is False
     assert widget.decay_angles_button.isEnabled() is False
 
     widget.viewer.add_image(np.random.random((100, 100)), name=IMAGE_LAYER_NAME)
@@ -48,7 +48,7 @@ def test_open_widget(make_napari_viewer, bypass, docking_area):
     assert widget.delete_process.isEnabled() is False
     assert widget.length_button.isEnabled() is False
     assert widget.stereoshift_button.isEnabled() is False
-    assert widget.magnification_button.isEnabled() is True
+    assert widget.image_calibration_button.isEnabled() is True
     assert widget.decay_angles_button.isEnabled() is False
 
 

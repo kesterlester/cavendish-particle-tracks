@@ -93,7 +93,7 @@ class ParticleTracksWidget(QWidget):
         self.length_button = QPushButton("Calculate length")
         self.decay_angles_button = QPushButton("Calculate decay angles")
         self.stereoshift_button = QPushButton("Stereoshift")
-        self.magnification_button = QPushButton("Image Calibration")
+        self.image_calibration_button = QPushButton("Image Calibration")
         self.save_data_button = QPushButton("Save")
 
         # setup particle table
@@ -118,7 +118,7 @@ class ParticleTracksWidget(QWidget):
         )
         self.save_data_button.clicked.connect(self._on_click_save)
 
-        self.magnification_button.clicked.connect(self._on_click_magnification)
+        self.image_calibration_button.clicked.connect(self._on_click_magnification)
         # TODO: find which of these works
         # https://napari.org/stable/gallery/custom_mouse_functions.html
         # self.viewer.mouse_press.callbacks.connect(self._on_mouse_press)
@@ -133,7 +133,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.length_button, 2, 1)
             self.buttonbox.addWidget(self.decay_angles_button, 3, 0)
             self.buttonbox.addWidget(self.stereoshift_button, 3, 1)
-            self.buttonbox.addWidget(self.magnification_button, 4, 0)
+            self.buttonbox.addWidget(self.image_calibration_button, 4, 0)
             self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
             self.buttonbox.addWidget(self.save_data_button, 5, 0)
 
@@ -153,7 +153,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.table)
             self.buttonbox.addWidget(self.apply_magnification_button)
             self.buttonbox.addWidget(self.stereoshift_button)
-            self.buttonbox.addWidget(self.magnification_button)
+            self.buttonbox.addWidget(self.image_calibration_button)
             self.buttonbox.addWidget(self.save_data_button)
             self.setLayout(self.buttonbox)
 
@@ -275,7 +275,7 @@ class ParticleTracksWidget(QWidget):
             self.save_data_button.setEnabled(True)
             self.delete_process.setEnabled(True)
             ## think about these two + cal once done.
-            self.magnification_button.setEnabled(True)
+            self.image_calibration_button.setEnabled(True)
             self.stereoshift_button.setEnabled(True)
             if self.data[selected_row].index < 4:
                 self.radius_button.setEnabled(True)
@@ -303,7 +303,7 @@ class ParticleTracksWidget(QWidget):
         if loaded:
             self.load_button.setEnabled(False)
             self.particle_decays_menu.setEnabled(True)
-            self.magnification_button.setEnabled(True)
+            self.image_calibration_button.setEnabled(True)
         else:
             self.load_button.setEnabled(True)
             self.particle_decays_menu.setEnabled(False)
@@ -313,7 +313,7 @@ class ParticleTracksWidget(QWidget):
             self.decay_angles_button.setEnabled(False)
             self.stereoshift_button.setEnabled(False)
             self.save_data_button.setEnabled(False)
-            self.magnification_button.setEnabled(False)
+            self.image_calibration_button.setEnabled(False)
             self.apply_magnification_button.setEnabled(False)
 
     def _selected_points_are_on_current_slice(self, selected_points) -> bool:

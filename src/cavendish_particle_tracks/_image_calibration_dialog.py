@@ -197,7 +197,7 @@ class MagnificationDialog(NonOverlappingQDialog):  # was QDialog
         self.parent._deactivate_calibration_layer(self.magnification_layer)
         self.parent.apply_magnification_button.setEnabled(True)
         # self.parent.mag.setEnabled(False)
-        self.parent.magnification_button.setText("Update magnification")
+        self.parent.image_calibration_button.setText("Update magnification")
         napari.utils.notifications.show_info("Magnification parameters updated.")
         return super().accept()
 
