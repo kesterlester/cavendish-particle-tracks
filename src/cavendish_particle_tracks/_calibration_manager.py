@@ -108,7 +108,7 @@ class CalibrationManager:
 
     def all_calibration_layers(self):
         # A simple python list of napari points layers.
-        return self.generic_calibration_layers() + [ self.event_calibration_layer() ]
+        return self.generic_calibration_layers() # + [ self.event_calibration_layer() ]
 
     def load_calibration(self):
         self._setup_calibration_layers(read_from_file=True)
