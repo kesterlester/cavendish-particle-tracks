@@ -108,7 +108,7 @@ class CalibrationManager:
 
     def all_calibration_layers(self):
         # A simple python list of napari points layers.
-        return self.generic_calibration_layers() # + [ self.event_calibration_layer() ]
+        return self.generic_calibration_layers() + [ self.event_calibration_layer() ]
 
     def load_calibration(self):
         self._setup_calibration_layers(read_from_file=True)
@@ -175,8 +175,11 @@ class CalibrationManager:
                 return symbol_sizes_in_data_pixels[None] # Generic or no-name
 
         for layer in self.all_calibration_layers():
-            types = layer.properties["types"]
             orig_symbol_sizes = layer.size.copy()
+            if "types" in layer.properties:
+                types = layer.properties["types"]
+            else:
+                types = [None,] * len(layer.data)  # Fallback for when types are not supplied.
             new_symbol_sizes = [ data_pixel_size_for(typ)  for typ in types ]
             layer.size = new_symbol_sizes # This updates the symbol size as desired.
 
