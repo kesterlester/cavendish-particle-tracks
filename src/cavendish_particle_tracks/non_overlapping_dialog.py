@@ -90,23 +90,23 @@ class NonOverlappingQDialog(QDialog):
         return False
 
     def show(self) -> None:
-        print("SHOW INTERCEPTED")
+        #print("SHOW INTERCEPTED")
         if self._exit_without_calling_super():
             return
         super().show()
 
     def open(self) -> None:
-        print("OPEN INTERCEPTED")
+        #print("OPEN INTERCEPTED")
         if self._exit_without_calling_super():
             return
         super().open()
 
     def hideEvent(selfs, event):
-        print("HIDE INTERCEPTED")
+        #print("HIDE INTERCEPTED")
         super().hideEvent(event)
 
     def closeEvent(self, event):
-        print("CLOSE INTERCEPTED")
+        #print("CLOSE INTERCEPTED")
         # clean up registry when dialog closes
         if self._registered:
             for token in self._tokens:

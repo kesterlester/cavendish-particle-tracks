@@ -598,11 +598,11 @@ After event.type='mouse_release' event.button=2
             if layer.name in self.viewer.layers:
                 # Existing layer, so callbacks already exist too, so just overwrite old layer data:
                 overwrite_layer(self.viewer.layers[layer.name], layer)
-                print("\n\n REPLACING DATA \n\n")
+                #print("\n\n REPLACING DATA \n\n")
             else:
                 # New layer!
                 new_layers.append(layer)
-                print("\n\n NOTING NEW LAYER \n\n")
+                #print("\n\n NOTING NEW LAYER \n\n")
 
         # Tell Napari about any new generic calibration layers:
         for new_layer in new_layers:
