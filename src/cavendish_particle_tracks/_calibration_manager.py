@@ -224,12 +224,14 @@ class CalibrationManager:
 
         if event.button == 2:  # right-click!
             coords = layer.world_to_data(event.position)
-            print(f"coords = {coords}")
-            ind = layer.get_value(coords, world=True)
-            print(f"ind is {ind}")
-            if ind is None:
+            #print(f"coords = {coords}")
+            index_of_nearest_point = layer.get_value(coords, world=True)
+            #print(f"index_of_nearest_point is {index_of_nearest_point}")
+            if index_of_nearest_point is None:
+                # This was not a right-click on a point.
                 return
-            i = ind
+
+            i = index_of_nearest_point  # Just abbreviation shorthand.
 
             type = layer.properties["types"][i]
 
@@ -245,7 +247,6 @@ class CalibrationManager:
                 menu.addAction(header)
                 menu.addSeparator()
 
-                # fixed_names = ["Alpha", "Beta", "Gamma"]
                 from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
 
                 if type == "front":
@@ -261,14 +262,10 @@ class CalibrationManager:
                     act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
                     menu.addAction(act)
 
-                #print(f" got 2 ")
-
                 # "no name" entry
                 noname = QAction("❌ Clear", menu)
                 noname.triggered.connect(lambda _: self.rename_point(i, "", type))
                 menu.addAction(noname)
-
-                #print(f" got 3 ")
 
                 # custom name entry
                 def custom_name():
@@ -281,35 +278,23 @@ class CalibrationManager:
                     if ok and text.strip():
                         self.rename_point(i, text.strip(), type)
 
-                #print(f" got 4 ")
-
                 menu.addSeparator()
                 custom = QAction("Custom name ...", menu)
                 custom.triggered.connect(custom_name)
                 menu.addAction(custom)
 
-                #print(f" got 5 ")
-
                 # popup at cursor position
                 menu.exec_(pos)  # use captured global cursor pos -- see (*) below
-
-            #print(" got 6 ")
 
             # capture cursor now
             pos = QCursor.pos()  # (*)
 
             """
-            We can't just all show_menu() in the next line as it 
+            We can't just call show_menu() in the next line as it 
             results in our capuring the right click by hiding the 
-            right mouse button RELEASE.
+            right mouse button RELEASE.  So we do this instead:
             """
             QTimer.singleShot(100, lambda: show_menu(type))
-
-            #print(f" got 7 ")
-
-
-
-
 
     def _default_generic_calibration_layers(self):
 
