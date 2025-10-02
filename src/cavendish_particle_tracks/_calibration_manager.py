@@ -233,7 +233,15 @@ class CalibrationManager:
         # CTRL as a modifier for left-click!  Note that add-to-selection in mac is CMD-left-click, so no
         # conflict with that.
 
-        if event.button == 2:  # right-click!
+        if event.button == 2:  # right-click!  Testing for mouse_release not mouse_press due to napari/qt bug that means that canas gets stuck in drag mode
+
+            print(f"Before {event.type=} {event.button=}")
+            if event.type == "mouse_press":
+                # Wait until mouse button release
+                print("yielding")
+                yield
+            print(f"After {event.type=} {event.button=}")
+
             coords = layer.world_to_data(event.position)
             #print(f"coords = {coords}")
             index_of_nearest_point = layer.get_value(coords, world=True)
