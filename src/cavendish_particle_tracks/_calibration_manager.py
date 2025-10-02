@@ -47,7 +47,7 @@ dialog ... so the above may change.
 view_indices = (0, 1, 2)
 GENERIC_CALIBRATION_LAYER_NAMES = [f"Calibration (generic; camera {v + 1})" for v in view_indices]
 PER_IMAGE_CALIBRATION_LAYER_NAME = "Calibration (per-image)"
-
+#TODO: This class should take over manangement of the visibility and focus of layer PER_IMAGE_CALIBRATION_LAYER_NAME, which is currently handled by _image_calibration_dialog.py
 
 class CalibrationManager:
     """
@@ -60,20 +60,28 @@ class CalibrationManager:
 
     num_generic_front_back_fid_pairs = 3
 
-    def __init__(self, viewer):
+    def __init__(self, parent, viewer):
 
+        self.parent = parent
         self.viewer = viewer
 
         # TODO: Try to avoid re-storing this redundant list of generic calibration layers .... should to live only in viewer?
         self._generic_calibration_layers = self._setup_calibration_layers()  # Returns a list of napari point layers.
+        self.event_calibration_layer() # Makes it
 
         # Make sure we are only shown when commanded!
         # We can only do this once we can call self.generic_calibration_layers()
         assert hasattr(self, "_generic_calibration_layers")
         self.set_calibration_layer_visibility_and_focus(False, False)
 
+
         # Lastly, setup callbacks:
         self._setup_callbacks()
+
+    def event_calibration_layer(self) -> napari.layers.Points:
+        if PER_IMAGE_CALIBRATION_LAYER_NAME in self.parent.viewer.layers:
+            return self.parent.viewer.layers[PER_IMAGE_CALIBRATION_LAYER_NAME]
+        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME)
 
     def _setup_callbacks(self):
         for layer in self.generic_calibration_layers():
@@ -185,7 +193,7 @@ class CalibrationManager:
 
     # Make the correct calibration layers visible/invisible based on the view slider:
     def _show_and_activate_correct_calibration_layer(self):
-        current_view = self.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are x and y
+        current_view = self.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
 
         for i, layer in enumerate(self.generic_calibration_layers()):
             # Make the current view active if so requested:
@@ -206,7 +214,10 @@ class CalibrationManager:
 
     def clone_fid_into_event(self, idx, name):
         print(f"About to clone generic fiducial {idx=} with {name=} into event.")
-        pass
+        for view, layer in enumerate(self.generic_calibration_layers()):
+            current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
+            fiducial_coords_in_this_layer = layer.data[idx]
+
 
     def rename_point(self, idx, name, type):
         # print(f"Renaming point idx={idx} with name={name}")

@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING
 
 import napari
-from napari.layers import Points
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -37,12 +36,8 @@ class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
 
         # region UI Setup
         self.ui_setup()
-        self.magnification_layer = self.create_or_retrieve_magnification_layer()
-
-    def create_or_retrieve_magnification_layer(self) -> Points:
-        if PER_IMAGE_CALIBRATION_LAYER_NAME in self.parent.viewer.layers:
-            return self.parent.viewer.layers[PER_IMAGE_CALIBRATION_LAYER_NAME]
-        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME)
+        self.magnification_layer = parent.calibration_manager.event_calibration_layer()
+        #self.magnification_layer = self.create_or_retrieve_magnification_layer()
 
     def ui_setup(self):
         # Drop-down selection of Fiducials

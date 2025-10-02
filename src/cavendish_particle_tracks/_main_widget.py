@@ -190,7 +190,7 @@ class ParticleTracksWidget(QWidget):
         if data_folder is not None:
             self._load_data_from(data_folder)
 
-        self.calibration_manager = CalibrationManager(self.viewer)
+        self.calibration_manager = CalibrationManager(self, self.viewer)
 
     @property
     def camera_center(self):
@@ -685,7 +685,7 @@ class ParticleTracksWidget(QWidget):
         """When the 'Calculate magnification' button is clicked, open the magnification dialog"""
         if self.mag_dlg is None:
             self.mag_dlg = ImageCalibrationDialog(self)
-        
+
         self.mag_dlg.show()
         self.mag_dlg.raise_()
         return self.mag_dlg
