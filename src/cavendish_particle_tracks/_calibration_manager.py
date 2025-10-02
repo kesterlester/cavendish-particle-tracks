@@ -356,7 +356,17 @@ After event.type='mouse_release' event.button=2
             # build popup menu
             menu = QMenu(self.viewer.window._qt_window)
 
-            header = QAction("Set name:", menu)
+            # Choose one:
+            THING = "name"
+            #THING = "label"
+
+            type_is_fiducial = type in ["front", "back"]
+
+            if type_is_fiducial:
+                header = QAction("Fiducial actions:", menu)
+            else:
+                header = QAction("Calibration point actions:", menu)
+
             header.setEnabled(False)  # makes it unclickable
             font = header.font()
             font.setBold(True)
@@ -375,15 +385,13 @@ After event.type='mouse_release' event.button=2
 
             # add fixed names
             for fname in fixed_names:
-                act = QAction(fname, menu)
+                act = QAction(f'Set {THING} to "{fname}"', menu)
                 act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
                 menu.addAction(act)
 
-            type_is_fiducial = type in ["front", "back"]
-
             if not type_is_fiducial:
                 # "no name" entry
-                noname = QAction("❌ Delete name", menu)
+                noname = QAction(f"❌ Delete {THING}", menu)
                 noname.triggered.connect(lambda _: self.rename_point(i, "", type))
                 menu.addAction(noname)
 
@@ -391,14 +399,14 @@ After event.type='mouse_release' event.button=2
                 def custom_name_calback():
                     text, ok = QInputDialog.getText(
                         self.viewer.window._qt_window,
-                        "Custom name",
-                        "Enter name:",
+                        f"Custom {THING}",
+                        f"Enter {THING}:",
                     )
                     if ok and text.strip():
                         self.rename_point(i, text.strip(), type)
 
                 menu.addSeparator()
-                custom_name_menu_item = QAction("Set custom name ...", menu)
+                custom_name_menu_item = QAction(f"Set custom {THING} ...", menu)
                 custom_name_menu_item.triggered.connect(custom_name_calback)
                 menu.addAction(custom_name_menu_item)
 
@@ -407,7 +415,7 @@ After event.type='mouse_release' event.button=2
                     pass
 
                 menu.addSeparator()
-                clone_into_current_image_menu_item = QAction("Save for this event ...", menu)
+                clone_into_current_image_menu_item = QAction("Insert into this specific event ...", menu)
                 clone_into_current_image_menu_item.triggered.connect(clone_into_current_image_callback)
                 menu.addAction(clone_into_current_image_menu_item)
 
@@ -427,7 +435,7 @@ After event.type='mouse_release' event.button=2
             # Perhaps this is the main documentation by example (but it does not have a mouse release): https://github.com/napari/napari/blob/main/examples/mouse_drag_callback.py
             event.handled = True
             yield
-            
+
         assert event.type == "mouse_release"
         event.handled = True
 
