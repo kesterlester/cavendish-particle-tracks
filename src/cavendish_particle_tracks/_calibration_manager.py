@@ -137,20 +137,31 @@ class CalibrationManager:
         if screen_pixels_per_data_pixel == None:
             screen_pixels_per_data_pixel = self.viewer.camera.zoom
 
-        generic_symbol_size_in_screen_pixels = 20
-        front_fid_target_size_in_screen_pixels = 1.0 * generic_symbol_size_in_screen_pixels
-        back_fid_target_size_in_screen_pixels = 0.7 * generic_symbol_size_in_screen_pixels
+        symbol_sizes_as_fractions_of_generic_symbol_size = {
+            "front" : 1.0,
+            "back" : 0.7,
+            "point" : 0.5,
+            "" : 1.0, # Generic or no-name
+            None : 1.0 # Generic or no-name
+        }
 
-        generic_symbol_size_in_data_pixels = generic_symbol_size_in_screen_pixels / screen_pixels_per_data_pixel
-        front_fid_size_in_data_pixels = front_fid_target_size_in_screen_pixels / screen_pixels_per_data_pixel
-        back_fid_size_in_data_pixels = back_fid_target_size_in_screen_pixels / screen_pixels_per_data_pixel
+        generic_symbol_size_in_screen_pixels = 20
+
+        symbol_sizes_in_screen_pixels = {
+            key : val*generic_symbol_size_in_screen_pixels
+            for key, val in symbol_sizes_as_fractions_of_generic_symbol_size.items()
+        }
+
+        symbol_sizes_in_data_pixels = {
+            key : val/screen_pixels_per_data_pixel
+            for key, val in symbol_sizes_in_screen_pixels.items()
+        }
 
         def data_pixel_size_for(typ: str):
-            if typ=="front":
-                return front_fid_size_in_data_pixels
-            if typ=="back":
-                return back_fid_size_in_data_pixels
-            return generic_symbol_size_in_data_pixels
+            if typ in symbol_sizes_in_data_pixels:
+                return symbol_sizes_in_data_pixels[typ]
+            else:
+                return symbol_sizes_in_data_pixels[None] # Generic or no-name
 
         for layer in self.generic_calibration_layers():
             types = layer.properties["types"]
@@ -262,26 +273,28 @@ class CalibrationManager:
                     act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
                     menu.addAction(act)
 
-                # "no name" entry
-                noname = QAction("❌ Clear", menu)
-                noname.triggered.connect(lambda _: self.rename_point(i, "", type))
-                menu.addAction(noname)
+                type_is_fiducial = type in ["front", "back"]
 
-                # custom name entry
-                def custom_name():
-                    print(f"In custom name")
-                    text, ok = QInputDialog.getText(
-                        self.viewer.window._qt_window,
-                        "Custom name",
-                        "Enter name:",
-                    )
-                    if ok and text.strip():
-                        self.rename_point(i, text.strip(), type)
+                if not type_is_fiducial:
+                    # "no name" entry
+                    noname = QAction("❌ Delete name", menu)
+                    noname.triggered.connect(lambda _: self.rename_point(i, "", type))
+                    menu.addAction(noname)
 
-                menu.addSeparator()
-                custom = QAction("Custom name ...", menu)
-                custom.triggered.connect(custom_name)
-                menu.addAction(custom)
+                    # custom name entry
+                    def custom_name():
+                        text, ok = QInputDialog.getText(
+                            self.viewer.window._qt_window,
+                            "Custom name",
+                            "Enter name:",
+                        )
+                        if ok and text.strip():
+                            self.rename_point(i, text.strip(), type)
+
+                    menu.addSeparator()
+                    custom = QAction("Custom name ...", menu)
+                    custom.triggered.connect(custom_name)
+                    menu.addAction(custom)
 
                 # popup at cursor position
                 menu.exec_(pos)  # use captured global cursor pos -- see (*) below
