@@ -6,6 +6,6 @@ At the moment you can clone all forms of A' (i.e. all three views) into the even
 
 Points in the event calib layer don't show their fidicual labels.  AND there is nothing to stop many of them being created in overlap with each other.
 
-calib changes are not registered in the dirty/clean mode.
+Users should be able to choose where calibrations get saved.
 
 The cloning of fid points into the event layer prevents inserting duplicates, but if you insert all views at once it may insert non-duplicates in some views and then hit a missing part, making for an incomplete operation. I.e. although duplicates will not be inserted, it is possible that a PARTIAL insertion will occur when really the user would prefer an all-success or all-failure outcome. So should validate earlier.

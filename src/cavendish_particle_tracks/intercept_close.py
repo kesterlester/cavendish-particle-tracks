@@ -59,18 +59,31 @@ class _CloseInterceptor(QObject):
     def eventFilter(self, obj, event):
 
         if event.type() == QEvent.Close:
-            if not getattr(self.plugin, "has_unsaved_data"):
-                print("Warning!  Did your plugin forget to implement the has_unsaved_data method needed by the CLoseInterceptor?")
+            if not getattr(self.plugin, "dirty_things"):
+                print("Warning!  Did your plugin forget to implement the dirty_things method needed by the CLoseInterceptor?")
 
-            if getattr(self.plugin, "has_unsaved_data", lambda: False)():
+            dirty_things = getattr(self.plugin, "dirty_things", lambda: [])()
+            if dirty_things:
+                #reply = QMessageBox.warning(
+                #    obj,
+                #    f"Unsaved things: {dirty_things}",
+                #    "Discard unsaved changes?",
+                #    QMessageBox.Discard | QMessageBox.Cancel,
+                #    QMessageBox.Cancel,
+                #)
+                msg = QMessageBox(obj)
+                msg.setWindowTitle(f"Unsaved things: {dirty_things}")
+                if len(dirty_things)==1:
+                    msg.setText(f"Discard unsaved changes detected in {dirty_things[0]} ?")
+                else:
+                    msg.setText(f"Discard unsaved changes detected in {dirty_things} ?")
+                msg.setIcon(QMessageBox.Warning)
+                # Set the buttons and default button
+                msg.setStandardButtons(QMessageBox.Discard | QMessageBox.Cancel)
+                msg.setDefaultButton(QMessageBox.Cancel)
+                # Show the box and get the result
+                reply = msg.exec()
 
-                reply = QMessageBox.warning(
-                    obj,
-                    "Unsaved data",
-                    "Discard unsaved changes?",
-                    QMessageBox.Discard | QMessageBox.Cancel,
-                    QMessageBox.Cancel,
-                )
                 if reply == QMessageBox.Cancel:
                     event.ignore()
                     return True # Also says event should be ignored.  See https://doc.qt.io/archives/qt-5.15/qobject.html#eventFilter

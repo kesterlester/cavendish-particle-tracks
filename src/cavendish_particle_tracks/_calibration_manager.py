@@ -85,9 +85,47 @@ class CalibrationManager:
         assert hasattr(self, "_generic_calibration_layers")
         self.set_calibration_layer_visibility_and_focus(False, False)
 
+        self.mark_clean()
 
         # Lastly, setup callbacks:
         self._setup_callbacks()
+
+    def mark_clean(self):
+        import copy
+        self.last_clean_state = copy.deepcopy(self.state())
+
+    def dirty_things(self):
+        calibrations_are_dirty = False
+
+        print("JJJJJJJJ", len(self.last_clean_state))
+        print("KKKKKKKK", len(self.state()))
+
+        for a, A in zip(self.last_clean_state, self.state()):
+            data, meta, _ = a
+            DATA, META, _ = A
+            print(f"MOOOOO {data=}")
+            print(f"MOOOOO {DATA=}")
+            if (data != DATA).any():
+                calibrations_are_dirty = True
+                break
+            # TODO: Insert meta comparison to
+
+        if calibrations_are_dirty:
+            return [ "calibrations" ]
+        else:
+            return []
+
+    def state(self):
+        print("KJHKJHKJHKJH", len(self.generic_calibration_layers()[0].as_layer_data_tuple()))
+        print("KJHKJHKJHKJH", len(tuple(l.as_layer_data_tuple() for l in self.generic_calibration_layers())))
+        print("KJHKJHKJHKJH", len(tuple( self.event_calibration_layer().as_layer_data_tuple())))
+
+        ans = tuple(l.as_layer_data_tuple() for l in self.generic_calibration_layers()) + \
+                            ( self.event_calibration_layer().as_layer_data_tuple(), ) # Don't forget that comma!
+        print("KJHKJHKJHKJH", ans)
+        print("OOKJHKJHKJHKJH", len(ans))
+        return ans
+
 
     def event_calibration_layer(self) -> napari.layers.Points:
         # TODO: This could break if the user first created a layer with exactly the right name before we construct.
@@ -98,8 +136,10 @@ class CalibrationManager:
 
         # Layer does not already exist, so construct and return it:
         layer = self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME, ndim=4, visible=False)
+        layer.properties = { "labels" : [], }
+        print(f"MOO SEE {layer.properties}")
         layer.text = {
-            'string': 'labels', # This is a key in properties
+            'string': 'labels', # This is a key in properties. Somehow it causes the error "Applying the encoding failed. Using the fallback value instead."
             'color': 'white',
             'size': 12,  # text size
             'anchor': 'center',
@@ -141,6 +181,7 @@ class CalibrationManager:
 
         self._refresh_visibility_and_focus_of_all_calibration_layers()
         self.refresh_symbol_sizes()
+        self.mark_clean()
 
     def save_calibration(self):
         acc = Accumulator()
@@ -150,6 +191,7 @@ class CalibrationManager:
             save(acc(self.filename_for_generic_calibration_layer(i)), layer)
         save(acc(self.filename_for_event_calibration_layer()), self.event_calibration_layer())
 
+        self.mark_clean()
         print(f"Saved calibrations to {acc}")
 
 

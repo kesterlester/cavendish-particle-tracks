@@ -58,13 +58,20 @@ class ParticleTracksWidget(QWidget):
 
     layer_measurements: napari.layers.Points
 
-    def has_unsaved_data(self):
+    def dirty_things(self):
+        dirty_things = []
         # try catch as could get a callback before we are ready!
         try:
-            return (self.data != self._data_at_last_save) or (False)
+            table_is_dirty =  (self.data != self._data_at_last_save)
+            if table_is_dirty:
+                dirty_things.append("decay table")
         except:
             # Attributes are missing so we are not even constructed yet!
-            return False
+            pass
+
+        dirty_things = dirty_things + self.calibration_manager.dirty_things()
+
+        return dirty_things
 
     def __init__(
         self,
