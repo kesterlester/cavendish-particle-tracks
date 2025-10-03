@@ -5,6 +5,33 @@ import time
 import functools
 import pandas as pd
 
+CPT_AXIS_NAMES = ["view", "event", "pixel_row", "pixel_col"]
+
+def read_CPT_points_layer_from_csv(path):
+    """
+    Reads a CSV written by write_CPT_points_to_csv and returns a napari Points layer.
+    Works for both 2D and 4D coordinate CSVs.
+
+    Only sets up the data and the properties.
+
+    Anything other things which are not in the csv (e.g. the layer name) or which
+    need to be set outside layer.data or layer.propertis (e.g. layer.text, layer.sumbols, etc)
+    are for others to set.
+    """
+    df = pd.read_csv(path)
+
+    # Select the ones actually present in the CSV
+    coord_columns = [c for c in CPT_AXIS_NAMES if c in df.columns]
+    coords = df[coord_columns].to_numpy()
+
+    # Everything else is treated as properties
+    prop_columns = [c for c in df.columns if c not in coord_columns]
+    properties = {c: df[c].to_numpy() for c in prop_columns}
+
+    # Create napari Points layer
+    layer = napari.layers.Points(coords, properties=properties)
+    return layer
+
 def write_CPT_points_layer_to_csv(path: str, layer):
     """
    This function writes a Cavendish-Particle-Tracks points layer to csv much
@@ -37,7 +64,7 @@ def write_CPT_points_layer_data_tuples_to_csv(path, layer_data_tuples):
             props = meta.get("properties", {})
 
             D = data.shape[1] # our dim, should be 2 or 4
-            axis_names = ["view", "event", "pixel_row", "pixel_col"][-D:]  # (2D data has only the last 2 columns)
+            axis_names = CPT_AXIS_NAMES[-D:]  # (2D data has only the last 2 columns)
 
             df = pd.DataFrame(data, columns=axis_names)
             for k, v in props.items():

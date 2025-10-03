@@ -482,15 +482,11 @@ After event.type='mouse_release' event.button=2
         fid_origin_y = 0.5 * TYPICAL_IMAGE_LONG_SIZE_PIX
         fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
 
-        #sc = 100 # Works OK on CLG's macbook but not on linux
-        #sc = 40 # Attempt to find something that works passably on both linux and mac.
-
         # First position the point being measured:
         labels = [ "point", ]
         symbols = [ "disc", ]
         colours = ["cyan", ]
         types = ["point", ]
-        #symbol_sizes = [1 * sc, ]
         points_in_generic_view = [ [origin_x, point_origin_y, ], ]
 
         # Now position the Front/Back fiducial pairs:
@@ -498,7 +494,6 @@ After event.type='mouse_release' event.button=2
             labels += [ "", "", ]
             types += ["front", "back", ]
             symbols += ["x", "x",]
-            #symbol_sizes += [1*sc, 0.5*sc,]
             points_in_generic_view += [
                 [origin_x - spread_x, fid_origin_y + i * fid_step_y, ],
                 [origin_x + spread_x, fid_origin_y + i * fid_step_y, ],
@@ -542,9 +537,6 @@ After event.type='mouse_release' event.button=2
                 debug_points_view_2_calibration_layer,
             ] # overwrites old points_in_view
             labels = debug_point_labels_all_calibration_layers
-
-        #for v in view_indices:
-        #    print(f"Point in view {v} are {points_in_view[v]}")
 
         layers = [
             self._single_generic_configuration_layer

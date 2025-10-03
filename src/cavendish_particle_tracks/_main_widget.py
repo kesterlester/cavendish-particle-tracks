@@ -36,7 +36,7 @@ from ._settings import get_bypass, get_shuffling_seed
 from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PARTICLES, VIEW_NAMES, ParticleDecay
+from .analysis import EXPECTED_PROCESSES, VIEW_NAMES, ParticleDecay
 
 MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
 IMAGE_LAYER_NAME = "Bubble Chamber Data"
@@ -85,7 +85,7 @@ class ParticleTracksWidget(QWidget):
         # define QtWidgets
         self.load_button = QPushButton("Load data")
         self.particle_decays_menu = QComboBox()
-        self.particle_decays_menu.addItems(EXPECTED_PARTICLES)
+        self.particle_decays_menu.addItems(EXPECTED_PROCESSES)
         self.particle_decays_menu.setCurrentIndex(0)
         self.particle_decays_menu.currentIndexChanged.connect(self._on_click_new_particle)
         self.radius_button = QPushButton("Calculate radius")

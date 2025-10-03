@@ -90,9 +90,10 @@ array([[1513.9479341 , 4522.05154178],
 TYPICAL_IMAGE_LONG_SIZE_PIX = 8377 # This is just typical. No guarantee that any particular image has this size!
 TYPICAL_IMAGE_SHORT_SIZE_PIX = 2753 # This is just typical. No guarantee that any particular image has this size!
 
+
 VIEW_NAMES = ["view1", "view2", "view3"]
 
-EXPECTED_PARTICLES = [
+EXPECTED_PROCESSES = [
     "New process",
     "Σ⁺ ⇨ p + π⁰",
     "Σ⁺ ⇨ n + π⁺",
