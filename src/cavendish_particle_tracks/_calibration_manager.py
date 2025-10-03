@@ -16,7 +16,7 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtGui import QCursor, QMouseEvent
 from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
-from .napari_tools import make_move_only, overwrite_layer
+from .napari_tools import make_move_only, overwrite_layer, write_CPT_points_layer_to_csv
 
 """
 Calibration points (locations of fiducials) come in two types:
@@ -56,10 +56,10 @@ class CalibrationManager:
 
     @staticmethod
     def filename_for_event_calibration_layer():
-        return "CPT_calibration_layer_EVENTS"
+        return "CPT_calibration_layer_EVENTS.csv"
 
     def filename_for_generic_calibration_layer(self, view_index):
-        return "CPT_calibration_layer_GC_" + str(view_index)
+        return "CPT_calibration_layer_GC_" + str(view_index) + ".csv"
 
     num_generic_front_back_fid_pairs = 3
 
@@ -120,9 +120,13 @@ class CalibrationManager:
         self.refresh_symbol_sizes()
 
     def save_calibration(self):
+
+        save = write_CPT_points_layer_to_csv
+
         for i, layer in enumerate(self.generic_calibration_layers()):
-            layer.save(self.filename_for_generic_calibration_layer(i)) # saves to csv file
-        self.event_calibration_layer().save(self.filename_for_event_calibration_layer())
+            save(self.filename_for_generic_calibration_layer(i), layer)
+
+        save(self.filename_for_event_calibration_layer(), self.event_calibration_layer())
 
     # Callback for when the 'View' slider changes:
     def callback_calibration_layer_visibility(self, event):
@@ -553,7 +557,7 @@ After event.type='mouse_release' event.button=2
 
             from .io import read_csv_with_constructors
 
-            filename = self.filename_for_generic_calibration_layer(v) + ".csv"
+            filename = self.filename_for_generic_calibration_layer(v)
 
             Point = lambda x, y : np.array([float(x),float(y)])
             constructors = [

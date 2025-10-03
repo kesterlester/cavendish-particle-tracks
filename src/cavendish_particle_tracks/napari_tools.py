@@ -3,6 +3,48 @@ from qtpy.QtWidgets import QMessageBox
 
 import time
 import functools
+import pandas as pd
+
+def write_CPT_points_layer_to_csv(path: str, layer):
+    """
+   This function writes a Cavendish-Particle-Tracks points layer to csv much
+    as napari would by default, except that it replaces the:
+
+            axis-0, axis-1, axis-2, axis-3
+
+    header names with:
+
+            view, event, pixel_row, pixel_col.
+    """
+    return write_CPT_points_layer_data_tuples_to_csv(path, [layer.as_layer_data_tuple()])
+
+def write_CPT_points_layer_data_tuples_to_csv(path, layer_data_tuples):
+    """
+    This function is used by write_CPT_layer_to_csv to write a Cavendish-Particle-Tracks points layer to csv much
+    as napari would by default, except that it replaces the:
+
+            axis-0, axis-1, axis-2, axis-3
+
+    header names with:
+
+            view, event, pixel_row, pixel_col.
+
+    The somewhat niche "layer_data_tuples" argument is just what is expected by newer napari I/O system (npe2) io plugins.
+    For more sane use internal to CPT just use write_CPT_layer_to_csv which wraps us.
+    """
+    for data, meta, layer_type in layer_data_tuples:
+        if layer_type == "points":
+            props = meta.get("properties", {})
+
+            D = data.shape[1] # our dim, should be 2 or 4
+            axis_names = ["view", "event", "pixel_row", "pixel_col"][-D:]  # (2D data has only the last 2 columns)
+
+            df = pd.DataFrame(data, columns=axis_names)
+            for k, v in props.items():
+                df[k] = v
+
+            df.to_csv(path, index=False)
+    return path
 
 def at_most_once_per(interval_in_seconds: float):
     """
