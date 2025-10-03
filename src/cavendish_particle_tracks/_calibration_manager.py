@@ -1,6 +1,7 @@
 
 import numpy as np
 import napari
+from chardet import detect
 
 from qtpy.QtWidgets import (
     QComboBox,
@@ -256,25 +257,38 @@ class CalibrationManager:
             # No harm in user having control over whether it is seen or not.
             # self.event_calibration_layer().visible = False
 
-    def clone_fid_into_event(self, idx, name):
-        print(f"About to clone generic fiducial {idx=} with {name=} into event.")
-        for view, layer_for_view in enumerate(self.generic_calibration_layers()):
-            current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
+    def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
+        print(f"About to clone generic fiducial {idx=} with {name=}")
+        current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
 
-            xy = layer_for_view.data[idx]
-            label = layer_for_view.properties["labels"][idx]
-            print(f"properties were {layer_for_view.properties["labels"]}")
-            print(f"Found label {label=} in clone_fid_into_event for {view=}")
+        # Find view from generic_calibration_layer, not by testing current_view, but by lookup of supplied layer, in case
+        # event has changed view during callback.
+        view = [ l.name for l in self.generic_calibration_layers()].index(generic_calibration_layer.name)  # names are unique
+        print(f"Clone things {view=}.")
+        xy = generic_calibration_layer.data[idx]
+        label = generic_calibration_layer.properties["labels"][idx]
+        print(f"properties were {generic_calibration_layer.properties["labels"]}")
+        print(f"Found label {label=} in clone_fid_into_event for {view=}") # Correct label is being found, but wrong one stored.
 
-            # Extend xy coords to 4D by adding view and event:
-            fiducial_coords_4d_for_this_fiducial_in_view = [view, current_event, xy[0], xy[1]]
+        # Extend xy coords to 4D by adding view and event:
+        fiducial_coords_4d_for_this_fiducial_in_view = [view, current_event, xy[0], xy[1]]
 
-            destination_layer = self.event_calibration_layer()
-            destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
-            destination_layer.current_symbol = "disc"
-            destination_layer.current_properties = {"labels": label}
+        destination_layer = self.event_calibration_layer()
 
+        print(f'BEFORE ADD, LABELS = {destination_layer.properties["labels"]}')
+        destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
+        destination_layer.current_symbol = "disc"
+        destination_layer.current_properties = {"labels": label}
+        print(f'AFTER ADD, LABELS = {destination_layer.properties["labels"]}')
+
+        destination_layer.text = destination_layer.text # Needed to get layer.text to pay attention to property changes
         self.refresh_symbol_sizes()
+        destination_layer.refresh() # render
+
+    def clone_all_views_of_this_fid_into_event(self, idx, name):
+        print(f"About to clone generic fiducial {idx=} with {name=} into event.")
+        for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
+            self.clone_only_this_fid_view_into_event(idx, name, generic_calibration_layer)
 
 
     def rename_point(self, idx, name, type):
@@ -484,10 +498,14 @@ After event.type='mouse_release' event.button=2
                 menu.addAction(custom_name_menu_item)
 
             if type_is_fiducial:
-
                 menu.addSeparator()
-                clone_into_current_image_menu_item = QAction("Insert into this specific event ...", menu)
-                clone_into_current_image_menu_item.triggered.connect(lambda _: self.clone_fid_into_event(i, name))
+                clone_into_current_image_menu_item = QAction("Insert ONLY THIS fiducial into current event ...", menu)
+                clone_into_current_image_menu_item.triggered.connect(
+                    lambda _: self.clone_only_this_fid_view_into_event(i, name, layer))
+                menu.addAction(clone_into_current_image_menu_item)
+
+                clone_into_current_image_menu_item = QAction("Insert ALL VIEWS OF this fiducial into current event ...", menu)
+                clone_into_current_image_menu_item.triggered.connect(lambda _: self.clone_all_views_of_this_fid_into_event(i, name))
                 menu.addAction(clone_into_current_image_menu_item)
 
             # popup at cursor position
