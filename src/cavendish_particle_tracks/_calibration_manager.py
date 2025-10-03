@@ -54,6 +54,10 @@ class CalibrationManager:
     and specific calibration data.
     """
 
+    @staticmethod
+    def filename_for_event_calibration_layer():
+        return "CPT_calibration_layer_EVENTS"
+
     def filename_for_generic_calibration_layer(self, view_index):
         return "CPT_calibration_layer_GC_" + str(view_index)
 
@@ -118,6 +122,7 @@ class CalibrationManager:
     def save_calibration(self):
         for i, layer in enumerate(self.generic_calibration_layers()):
             layer.save(self.filename_for_generic_calibration_layer(i)) # saves to csv file
+        self.event_calibration_layer().save(self.filename_for_event_calibration_layer())
 
     # Callback for when the 'View' slider changes:
     def callback_calibration_layer_visibility(self, event):

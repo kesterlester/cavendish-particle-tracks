@@ -6,4 +6,4 @@ At the moment you can clone all forms of A' (i.e. all three views) into the even
 
 Points in the event calib layer don't show their fidicual labels.  AND there is nothing to stop many of them being created in overlap with each other.
 
-Can't save points in the event calib layer yet.
+Can't LOAD points in the event calib layer yet.
