@@ -117,6 +117,7 @@ class CalibrationManager:
 
     def load_calibration(self):
         self._setup_calibration_layers(read_from_file=True)
+
         self._refresh_visibility_and_focus_of_all_calibration_layers()
         self.refresh_symbol_sizes()
 
@@ -526,7 +527,7 @@ After event.type='mouse_release' event.button=2
 
         # If in debug mode can replace the points and labels with ones that are physically interesting.
         # Don't give this option to the students!
-        debug_fiducial_mode = True
+        debug_fiducial_mode = False
 
         # The pre-made points assume 3 pairs of fiducials in each view, so:
         if debug_fiducial_mode and CalibrationManager.num_generic_front_back_fid_pairs == 3:
@@ -575,6 +576,7 @@ After event.type='mouse_release' event.button=2
             # points, labels, colours, types, symbols, symbol_sizes = read_csv_with_constructors(filename, constructors)
             points, labels, colours, types, symbols = read_csv_with_constructors(filename, constructors)
 
+
             layers.append(self._single_generic_configuration_layer(
                 v, points, labels, colours, types, symbols, #symbol_sizes
             ))
@@ -584,6 +586,11 @@ After event.type='mouse_release' event.button=2
     def _single_generic_configuration_layer(self, view_index,
                                             points, labels, colours, types, symbols, #symbol_sizes
                                             ):
+        """
+        The point of this function is to provide a single route through which generic config layers are constructed,
+        so that even if such layers need internally derived settings, or things not in a csv file, they can be applied
+        universally and consistently.
+        """
         props = {
             'labels': labels,
             'colours': colours,
