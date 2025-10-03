@@ -564,7 +564,7 @@ After event.type='mouse_release' event.button=2
 
             Point = lambda x, y : np.array([float(x),float(y)])
             constructors = [
-                (Point, 'axis-0', 'axis-1'),
+                (Point, 'pixel_row', 'pixel_col'),
                 (str, 'labels'),
                 (str, 'colours'),
                 (str, 'types'),
