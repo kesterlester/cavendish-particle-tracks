@@ -64,9 +64,9 @@ class CalibrationManager:
         self.parent = parent
         self.viewer = viewer
 
+        self.event_calibration_layer() # Makes this layer and puts it earlier in the layer list than the next guys:
         # TODO: Try to avoid re-storing this redundant list of generic calibration layers .... should to live only in viewer?
         self._generic_calibration_layers = self._setup_calibration_layers()  # Returns a list of napari point layers.
-        self.event_calibration_layer() # Makes it
 
         # Make sure we are only shown when commanded!
         # We can only do this once we can call self.generic_calibration_layers()
@@ -236,6 +236,7 @@ class CalibrationManager:
             destination_layer.current_symbol = "disc"
             destination_layer.current_text = name
             destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
+        self.refresh_symbol_sizes()
 
 
     def rename_point(self, idx, name, type):
