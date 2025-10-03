@@ -273,8 +273,8 @@ class CalibrationManager:
                 #layer.text.values[other_idx] = other_name  # This change is needed for display purposes.
                 layer.properties["labels"][other_idx] = other_name  # This change is needed for saving purposes.
 
-            layer.properties
-            layer.refresh()
+            layer.text = layer.text  # necessary so that layer.text becomes "aware" of the changes we made to layer.properties
+            layer.refresh() # render changes to screen
 
     def on_mouse(self, layer, event):
         # This implements a right-click drop-down menu in response to a point in a generic calibration layer.
