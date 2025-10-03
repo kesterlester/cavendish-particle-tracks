@@ -59,9 +59,9 @@ class ParticleTracksWidget(QWidget):
     layer_measurements: napari.layers.Points
 
     def has_unsaved_data(self):
-        # Need to check attributes as could get a callback before we are ready!
+        # try catch as could get a callback before we are ready!
         try:
-            return self.data != self._data_at_last_save
+            return (self.data != self._data_at_last_save) or (False)
         except:
             # Attributes are missing so we are not even constructed yet!
             return False

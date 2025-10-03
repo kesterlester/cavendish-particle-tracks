@@ -67,7 +67,7 @@ class CalibrationManager:
 
     @staticmethod
     def filename_for_generic_calibration_layer(view_index):
-        return "CPT_calibration_layer_GC_" + str(view_index) + ".csv"
+        return "CPT_generic_calibration_layer_" + str(view_index) + ".csv"
 
     num_generic_front_back_fid_pairs = 3
 
