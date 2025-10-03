@@ -8,4 +8,4 @@ Points in the event calib layer don't show their fidicual labels.  AND there is 
 
 calib changes are not registered in the dirty/clean mode.
 
-Should I change the calib layer load to be all about overwrite?
+The cloning of fid points into the event layer prevents inserting duplicates, but if you insert all views at once it may insert non-duplicates in some views and then hit a missing part, making for an incomplete operation. I.e. although duplicates will not be inserted, it is possible that a PARTIAL insertion will occur when really the user would prefer an all-success or all-failure outcome. So should validate earlier.

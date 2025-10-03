@@ -259,12 +259,36 @@ class CalibrationManager:
 
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
         print(f"About to clone generic fiducial {idx=} with {name=}")
+        destination_layer = self.event_calibration_layer()
+
+        # TODO: Either current_event should be passed in (like view) or view should use current_step look up.
+        # It makes no sense for one to do one and the other the other!
         current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
 
         # Find view from generic_calibration_layer, not by testing current_view, but by lookup of supplied layer, in case
         # event has changed view during callback.
-        view = [ l.name for l in self.generic_calibration_layers()].index(generic_calibration_layer.name)  # names are unique
-        print(f"Clone things {view=}.")
+        view = [l.name for l in self.generic_calibration_layers()].index(
+            generic_calibration_layer.name)  # names are unique
+        print(f"Clone thinks {view=}.")
+
+        # Don't allow unnamed fid insertion:
+        if name == "" or name == None:
+            napari.utils.notifications.show_error(f'Fiducial must have a name before it can be cloned.')
+            return
+
+        # Check that there is not already a fid with this name, and forbid injection if there is.
+        # We do not want to have more than one fid with the same name in the event layer at a given view.
+        mask = ((destination_layer.data[:, 0] == view) &
+                (destination_layer.data[:, 1] == current_event) &
+                (destination_layer.properties["labels"] == name))
+        #print(f"Search for {ma,e} Saw {mask=} when \ndestination_layer.properties['labels'] was {destination_layer.properties['labels']} "
+        #      f"and \ndestination_layer.data was {destination_layer.data}")
+
+        if mask.any():
+            napari.utils.notifications.show_error(f'There is already a fiducial named "{name}" in '
+                                                  f"camera {view+1}'s view of event {current_event}.")
+            return
+
         xy = generic_calibration_layer.data[idx]
         label = generic_calibration_layer.properties["labels"][idx]
         print(f"properties were {generic_calibration_layer.properties["labels"]}")
@@ -273,7 +297,6 @@ class CalibrationManager:
         # Extend xy coords to 4D by adding view and event:
         fiducial_coords_4d_for_this_fiducial_in_view = [view, current_event, xy[0], xy[1]]
 
-        destination_layer = self.event_calibration_layer()
 
         print(f'BEFORE ADD, LABELS = {destination_layer.properties["labels"]}')
         destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
@@ -281,7 +304,7 @@ class CalibrationManager:
         destination_layer.current_properties = {"labels": label}
         print(f'AFTER ADD, LABELS = {destination_layer.properties["labels"]}')
 
-        destination_layer.text = destination_layer.text # Needed to get layer.text to pay attention to property changes
+        destination_layer.text = destination_layer.text # Needed to get layer.text to become "aware" of property changes
         self.refresh_symbol_sizes()
         destination_layer.refresh() # render
 
@@ -290,12 +313,22 @@ class CalibrationManager:
         for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
             self.clone_only_this_fid_view_into_event(idx, name, generic_calibration_layer)
 
-
     def rename_point(self, idx, name, type):
-        # print(f"Renaming point idx={idx} with name={name}")
+        # print(f"Renaming point idx={idx} to name={name}")
 
         other_idx = None  # Default
         other_name = None  # Default
+
+        # Could add in the next check, but it is arguably unnecessary.
+        # type_is_fiducial = (type == "front" or type == "back")
+        # if type_is_fiducial and name != "":
+        #    # Check that there is not already a fid with this name, and forbid if there is.
+        #    # We do not want multiple pairs of generic fids!
+        #    for layer in self.generic_calibration_layers():
+        #        if name in layer.properties["labels"]:
+        #            napari.utils.notifications.show_error(f'A generic fiducial named "{name}" already exists.')
+        #            return
+
         if type == "front":
             other_idx = idx + 1  # we store front-then-back, so back is +1 on.
             other_name = name[:-1]  # all bar the last character (to remove prime)
