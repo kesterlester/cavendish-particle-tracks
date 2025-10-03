@@ -114,7 +114,7 @@ class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
         self.layout().addWidget(self.calculate_magnification_button, 6, 0, 1, 3)
 
         self.layout().addWidget(self.load_calibrations_button, 7, 0, 1, 1)
-        self.layout().addWidget(self.save_calibrations_button, 7, 4, 1, 3)
+        self.layout().addWidget(self.save_calibrations_button, 7, 3, 1, 3)
 
         self.layout().addWidget(
             QLabel("Magnification parameters (M = a + b z)"), 8, 0, 1, 3
