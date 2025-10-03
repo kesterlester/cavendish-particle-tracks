@@ -258,7 +258,7 @@ class CalibrationManager:
             # self.event_calibration_layer().visible = False
 
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
-        print(f"About to clone generic fiducial {idx=} with {name=}")
+        #print(f"About to clone generic fiducial {idx=} with {name=}")
         destination_layer = self.event_calibration_layer()
 
         # TODO: Either current_event should be passed in (like view) or view should use current_step look up.
@@ -269,7 +269,7 @@ class CalibrationManager:
         # event has changed view during callback.
         view = [l.name for l in self.generic_calibration_layers()].index(
             generic_calibration_layer.name)  # names are unique
-        print(f"Clone thinks {view=}.")
+        #print(f"Clone thinks {view=}.")
 
         # Don't allow unnamed fid insertion:
         if name == "" or name == None:
@@ -291,25 +291,25 @@ class CalibrationManager:
 
         xy = generic_calibration_layer.data[idx]
         label = generic_calibration_layer.properties["labels"][idx]
-        print(f"properties were {generic_calibration_layer.properties["labels"]}")
-        print(f"Found label {label=} in clone_fid_into_event for {view=}") # Correct label is being found, but wrong one stored.
+        #print(f"properties were {generic_calibration_layer.properties["labels"]}")
+        #print(f"Found label {label=} in clone_fid_into_event for {view=}") # Correct label is being found, but wrong one stored.
 
         # Extend xy coords to 4D by adding view and event:
         fiducial_coords_4d_for_this_fiducial_in_view = [view, current_event, xy[0], xy[1]]
 
 
-        print(f'BEFORE ADD, LABELS = {destination_layer.properties["labels"]}')
+        #print(f'BEFORE ADD, LABELS = {destination_layer.properties["labels"]}')
         destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
         destination_layer.current_symbol = "disc"
         destination_layer.current_properties = {"labels": label}
-        print(f'AFTER ADD, LABELS = {destination_layer.properties["labels"]}')
+        #print(f'AFTER ADD, LABELS = {destination_layer.properties["labels"]}')
 
         destination_layer.text = destination_layer.text # Needed to get layer.text to become "aware" of property changes
         self.refresh_symbol_sizes()
         destination_layer.refresh() # render
 
     def clone_all_views_of_this_fid_into_event(self, idx, name):
-        print(f"About to clone generic fiducial {idx=} with {name=} into event.")
+        #print(f"About to clone generic fiducial {idx=} with {name=} into event.")
         for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
             self.clone_only_this_fid_view_into_event(idx, name, generic_calibration_layer)
 
