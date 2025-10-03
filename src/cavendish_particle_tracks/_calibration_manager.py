@@ -266,13 +266,14 @@ class CalibrationManager:
 
         for layer in self.generic_calibration_layers():
             # print(f"before alteration {layer.text}")
-            layer.text.values[idx] = name  # This change is needed for display purposes.
+            #layer.text.values[idx] = name  # This change is needed for display purposes.
             layer.properties["labels"][idx] = name  # This change is needed for saving purposes.
             # print(f"after  alteration {layer.text}")
             if other_idx is not None and other_name is not None:
-                layer.text.values[other_idx] = other_name  # This change is needed for display purposes.
+                #layer.text.values[other_idx] = other_name  # This change is needed for display purposes.
                 layer.properties["labels"][other_idx] = other_name  # This change is needed for saving purposes.
 
+            layer.properties
             layer.refresh()
 
     def on_mouse(self, layer, event):
@@ -613,7 +614,7 @@ After event.type='mouse_release' event.button=2
             visible=False,
         )
         layer.text = {
-            'string': labels,
+            'string': 'labels', # This is a key in properties
             'color': colours,
             'size': 12,
             'anchor': 'center',
