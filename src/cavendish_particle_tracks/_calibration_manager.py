@@ -94,8 +94,17 @@ class CalibrationManager:
         if PER_IMAGE_CALIBRATION_LAYER_NAME in self.parent.viewer.layers:
             # Layer already exists, so just return it:
             return self.parent.viewer.layers[PER_IMAGE_CALIBRATION_LAYER_NAME]
+
         # Layer does not already exist, so construct and return it:
-        return self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME, ndim=4, visible=False)
+        layer = self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME, ndim=4, visible=False)
+        layer.text = {
+            'string': 'labels', # This is a key in properties
+            'color': 'white',
+            'size': 12,  # text size
+            'anchor': 'center',
+            'translation': np.array([0, 0, -150, 0]),  # move text 150 (data) pixels up.  4D since 4D
+        }
+        return layer
 
     def _setup_callbacks(self):
         for layer in self.generic_calibration_layers():
@@ -251,15 +260,20 @@ class CalibrationManager:
         print(f"About to clone generic fiducial {idx=} with {name=} into event.")
         for view, layer_for_view in enumerate(self.generic_calibration_layers()):
             current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
+
             xy = layer_for_view.data[idx]
+            label = layer_for_view.properties["labels"][idx]
+            print(f"properties were {layer_for_view.properties["labels"]}")
+            print(f"Found label {label=} in clone_fid_into_event for {view=}")
 
             # Extend xy coords to 4D by adding view and event:
             fiducial_coords_4d_for_this_fiducial_in_view = [view, current_event, xy[0], xy[1]]
 
             destination_layer = self.event_calibration_layer()
-            destination_layer.current_symbol = "disc"
-            destination_layer.current_text = name
             destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
+            destination_layer.current_symbol = "disc"
+            destination_layer.current_properties = {"labels": label}
+
         self.refresh_symbol_sizes()
 
 
