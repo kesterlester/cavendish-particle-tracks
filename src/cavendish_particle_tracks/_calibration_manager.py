@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
 from qtpy.QtGui import QCursor, QMouseEvent
 from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
 from .napari_tools import make_move_only, overwrite_layer, write_CPT_points_layer_to_csv
+from .tools import Accumulator
 
 """
 Calibration points (locations of fiducials) come in two types:
@@ -120,13 +121,15 @@ class CalibrationManager:
         self.refresh_symbol_sizes()
 
     def save_calibration(self):
+        acc = Accumulator()
 
         save = write_CPT_points_layer_to_csv
-
         for i, layer in enumerate(self.generic_calibration_layers()):
-            save(self.filename_for_generic_calibration_layer(i), layer)
+            save(acc(self.filename_for_generic_calibration_layer(i)), layer)
+        save(acc(self.filename_for_event_calibration_layer()), self.event_calibration_layer())
 
-        save(self.filename_for_event_calibration_layer(), self.event_calibration_layer())
+        print(f"Saved calibrations to {acc}")
+
 
     # Callback for when the 'View' slider changes:
     def callback_calibration_layer_visibility(self, event):

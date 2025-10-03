@@ -68,6 +68,13 @@ class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
         self.add_b2_button.clicked.connect(self._on_click_add_coords_b2)
         self.calculate_magnification_button = QPushButton("Calculate magnification")
         self.calculate_magnification_button.clicked.connect(self._on_click_magnification)
+
+        self.save_calibrations_button = QPushButton("Save calibrations")
+        self.load_calibrations_button = QPushButton("Load calibrations")
+
+        self.save_calibrations_button.clicked.connect(self.parent.calibration_manager.save_calibration)
+        self.load_calibrations_button.clicked.connect(self.parent.calibration_manager.load_calibration)
+
         # Add table to show the resultant magnification parameter
         self.table = QTableWidget(1, 2)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -105,12 +112,16 @@ class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
             self.layout().addWidget(widget, i // 3 + 4, i % 3)
 
         self.layout().addWidget(self.calculate_magnification_button, 6, 0, 1, 3)
-        self.layout().addWidget(
-            QLabel("Magnification parameters (M = a + b z)"), 7, 0, 1, 3
-        )
-        self.layout().addWidget(self.table, 8, 0, 1, 3)
 
-        self.layout().addWidget(self.buttonBox, 9, 0, 1, 3)
+        self.layout().addWidget(self.load_calibrations_button, 7, 0, 1, 1)
+        self.layout().addWidget(self.save_calibrations_button, 7, 4, 1, 3)
+
+        self.layout().addWidget(
+            QLabel("Magnification parameters (M = a + b z)"), 8, 0, 1, 3
+        )
+        self.layout().addWidget(self.table, 9, 0, 1, 3)
+
+        self.layout().addWidget(self.buttonBox, 10, 0, 1, 3)
 
         self.a = self.parent.mag_a
         self.b = self.parent.mag_b
