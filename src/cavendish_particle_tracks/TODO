@@ -6,10 +6,6 @@ At the moment you can clone all forms of A' (i.e. all three views) into the even
 
 Points in the event calib layer don't show their fidicual labels.  AND there is nothing to stop many of them being created in overlap with each other.
 
-Can't load points in the event calib layer yet.
-
-calib point CVSs are headed axis-0 axis-1 etc rather than event, view, row, col
-
 calib changes are not registered in the dirty/clean mode.
 
 Should I change the calib layer load to be all about overwrite?

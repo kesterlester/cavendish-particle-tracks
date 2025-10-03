@@ -16,7 +16,12 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtGui import QCursor, QMouseEvent
 from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
-from .napari_tools import make_move_only, overwrite_layer, write_CPT_points_layer_to_csv
+from .napari_tools import (
+    make_move_only,
+    overwrite_layer,
+    write_CPT_points_layer_to_csv,
+    read_CPT_points_layer_from_csv,
+)
 from .tools import Accumulator
 
 """
@@ -59,7 +64,8 @@ class CalibrationManager:
     def filename_for_event_calibration_layer():
         return "CPT_calibration_layer_EVENTS.csv"
 
-    def filename_for_generic_calibration_layer(self, view_index):
+    @staticmethod
+    def filename_for_generic_calibration_layer(view_index):
         return "CPT_calibration_layer_GC_" + str(view_index) + ".csv"
 
     num_generic_front_back_fid_pairs = 3
@@ -117,6 +123,11 @@ class CalibrationManager:
 
     def load_calibration(self):
         self._setup_calibration_layers(read_from_file=True)
+
+        layer_with_data_and_props = read_CPT_points_layer_from_csv(self.filename_for_event_calibration_layer())
+
+        self.event_calibration_layer().data = layer_with_data_and_props.data
+        self.event_calibration_layer().properties = layer_with_data_and_props.properties
 
         self._refresh_visibility_and_focus_of_all_calibration_layers()
         self.refresh_symbol_sizes()
