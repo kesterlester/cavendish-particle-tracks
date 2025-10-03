@@ -591,6 +591,7 @@ After event.type='mouse_release' event.button=2
         The point of this function is to provide a single route through which generic config layers are constructed,
         so that even if such layers need internally derived settings, or things not in a csv file, they can be applied
         universally and consistently.
+        For example, the layer names are taken from GENERIC_CALIBRATION_LAYER_NAMES[view_index].
         """
         props = {
             'labels': labels,
