@@ -184,15 +184,27 @@ class CalibrationManager:
         self.mark_clean()
 
     def save_calibration(self):
-        acc = Accumulator()
+
+        f_view0 = self.filename_for_generic_calibration_layer(0)
+        f_view1 = self.filename_for_generic_calibration_layer(1)
+        f_view2 = self.filename_for_generic_calibration_layer(2)
+        f_generic = self.filename_for_event_calibration_layer()
+
+        self.save_calibrations_to_separate_files(f_view0, f_view1, f_view2, f_generic)
+
+        self.mark_clean()
+        print(f"Saved calibrations.")
+
+
+    def save_calibrations_to_separate_files(self, f_view0, f_view1, f_view2, f_generic):
 
         save = write_CPT_points_layer_to_csv
         for i, layer in enumerate(self.generic_calibration_layers()):
-            save(acc(self.filename_for_generic_calibration_layer(i)), layer)
-        save(acc(self.filename_for_event_calibration_layer()), self.event_calibration_layer())
+            save(self.filename_for_generic_calibration_layer(i), layer)
+        save(self.filename_for_event_calibration_layer(), self.event_calibration_layer())
 
-        self.mark_clean()
-        print(f"Saved calibrations to {acc}")
+
+
 
 
     # Callback for when the 'View' slider changes:
