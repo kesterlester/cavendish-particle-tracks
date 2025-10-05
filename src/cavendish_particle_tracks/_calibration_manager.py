@@ -1,7 +1,8 @@
 
 import numpy as np
 import napari
-from chardet import detect
+import tempfile
+import pandas as pd
 
 from qtpy.QtWidgets import (
     QComboBox,
@@ -17,6 +18,8 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtGui import QCursor, QMouseEvent
 from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
+
+from .analysis import VIEW_NAMES
 from .napari_tools import (
     make_move_only,
     overwrite_layer,
@@ -185,23 +188,48 @@ class CalibrationManager:
 
     def save_calibration(self):
 
-        f_view0 = self.filename_for_generic_calibration_layer(0)
-        f_view1 = self.filename_for_generic_calibration_layer(1)
-        f_view2 = self.filename_for_generic_calibration_layer(2)
-        f_generic = self.filename_for_event_calibration_layer()
+        with (
+            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view0,
+            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view1,
+            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view2,
+            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_generic,
+            open("CPT_image_calibrations.csv", "w") as output_csv_file,
+        ):
+            #f_view0 = self.filename_for_generic_calibration_layer(0)
+            #f_view1 = self.filename_for_generic_calibration_layer(1)
+            #f_view2 = self.filename_for_generic_calibration_layer(2)
+            #f_generic = self.filename_for_event_calibration_layer()
 
-        self.save_calibrations_to_separate_files(f_view0, f_view1, f_view2, f_generic)
+            f_views = (f_view0, f_view1, f_view2)
+            tmp_files = f_views + (f_generic,)  # don't lose that comma!
+
+            assert len(f_views) == len(VIEW_NAMES)
+            assert len(f_views) == 3
+            assert len(tmp_files) == 4
+
+            self.save_calibrations_to_separate_files(f_views, f_generic)
+
+            for f in tmp_files:
+                f.seek(0) # Rewind the files so that they are flushed and may be read from the front.
+
+            self.merge_calibration_files(f_views, f_generic, output_csv_file)
 
         self.mark_clean()
         print(f"Saved calibrations.")
 
+    def merge_calibration_files(self, f_views, f_generic, output_csv_file):
+        tmp_files = f_views + (f_generic,)
+        for tmp_file in tmp_files:
+            for line in tmp_file:
+                output_csv_file.write(line)
 
-    def save_calibrations_to_separate_files(self, f_view0, f_view1, f_view2, f_generic):
+    def save_calibrations_to_separate_files(self, f_views, f_generic):
+        assert len(f_views) == len(VIEW_NAMES)
 
         save = write_CPT_points_layer_to_csv
         for i, layer in enumerate(self.generic_calibration_layers()):
-            save(self.filename_for_generic_calibration_layer(i), layer)
-        save(self.filename_for_event_calibration_layer(), self.event_calibration_layer())
+            save(f_views[i], layer)
+        save(f_generic, self.event_calibration_layer())
 
 
 
