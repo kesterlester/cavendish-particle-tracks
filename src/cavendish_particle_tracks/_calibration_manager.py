@@ -627,7 +627,7 @@ After event.type='mouse_release' event.button=2
             elif type == "back":
                 fixed_names = list(FIDUCIAL_BACK.keys())
             else:
-                fixed_names = ["point"]
+                fixed_names = ["start", "stop", "other"]
 
             # add fixed names
             for fname in fixed_names:
@@ -637,9 +637,9 @@ After event.type='mouse_release' event.button=2
 
             if not type_is_fiducial:
                 # "no name" entry
-                noname = QAction(f"❌ Delete {THING}", menu)
-                noname.triggered.connect(lambda _: self.rename_point(i, "", type))
-                menu.addAction(noname)
+                #noname = QAction(f"❌ Delete {THING}", menu)
+                #noname.triggered.connect(lambda _: self.rename_point(i, "", type))
+                #menu.addAction(noname)
 
                 # custom name entry
                 def custom_name_calback():
