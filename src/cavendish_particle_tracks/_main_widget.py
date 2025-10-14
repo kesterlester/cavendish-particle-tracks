@@ -92,7 +92,7 @@ class ParticleTracksWidget(QWidget):
         self.shuffling_seed = get_shuffling_seed(fallback=1)
 
         # define QtWidgets
-        self.load_button = QPushButton("Load data")
+        self.load_button = QPushButton("Load images")
         self.particle_decays_menu = QComboBox()
         self.particle_decays_menu.addItems(EXPECTED_PROCESSES_NICE)
         self.particle_decays_menu.setCurrentIndex(0)
@@ -143,7 +143,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.decay_angles_button, 3, 0)
             self.buttonbox.addWidget(self.save_data_button, 3, 1)
             #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
-            self.buttonbox.addWidget(self.image_calibration_button, 4, 0)
+            self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
             #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
 
 

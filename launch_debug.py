@@ -12,7 +12,7 @@ plugin_docking_area = "bottom"
 data_folder=None
 
 # Developers may wish to uncomment the next line
-data_folder="../cavendish-particle-tracks-data/"
+#data_folder="../cavendish-particle-tracks-data/"
 
 # Create the plugin:
 plugin_widget = get_singleton(viewer, docking_area=plugin_docking_area, data_folder=data_folder )

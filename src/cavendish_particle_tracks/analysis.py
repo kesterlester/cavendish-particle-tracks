@@ -94,7 +94,7 @@ TYPICAL_IMAGE_SHORT_SIZE_PIX = 2753 # This is just typical. No guarantee that an
 VIEW_NAMES = ["view1", "view2", "view3"]
 
 EXPECTED_PROCESSES_NICE_TO_ASCII = {
-    "New process": "New process",
+    "Add process": "Add process",
     "Σ⁺ ⇨ p + π⁰": "Sigma+_to_p_pi0",
     "Σ⁺ ⇨ n + π⁺": "Sigma+_to_n_pi+",
     "Σ⁻ ⇨ n + π⁻": "Sigma-_to_p_pi-",
