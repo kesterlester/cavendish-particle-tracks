@@ -384,6 +384,14 @@ class CalibrationManager:
             # self.event_calibration_layer().visible = False
 
     def clone_only_this_point_view_into_table(self, idx, name, generic_calibration_layer):
+        #Find point xy in pixels
+        xy = generic_calibration_layer.data[idx]
+
+        # Find view from generic_calibration_layer:
+        view = [l.name for l in self.generic_calibration_layers()].index(
+            generic_calibration_layer.name)  # names are unique
+        print(f"Clone thinks point has {view=} and {xy=}.")
+
         pass # NOT YET IMPLEMENTED
 
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
@@ -394,8 +402,7 @@ class CalibrationManager:
         # It makes no sense for one to do one and the other the other!
         current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
 
-        # Find view from generic_calibration_layer, not by testing current_view, but by lookup of supplied layer, in case
-        # event has changed view during callback.
+        # Find view from generic_calibration_layer:
         view = [l.name for l in self.generic_calibration_layers()].index(
             generic_calibration_layer.name)  # names are unique
         #print(f"Clone thinks {view=}.")
