@@ -120,14 +120,14 @@ class CalibrationManager:
             return []
 
     def state(self):
-        print("KJHKJHKJHKJH", len(self.generic_calibration_layers()[0].as_layer_data_tuple()))
-        print("KJHKJHKJHKJH", len(tuple(l.as_layer_data_tuple() for l in self.generic_calibration_layers())))
-        print("KJHKJHKJHKJH", len(tuple( self.event_calibration_layer().as_layer_data_tuple())))
+        #print("KJHKJHKJHKJH", len(self.generic_calibration_layers()[0].as_layer_data_tuple()))
+        #print("KJHKJHKJHKJH", len(tuple(l.as_layer_data_tuple() for l in self.generic_calibration_layers())))
+        #print("KJHKJHKJHKJH", len(tuple( self.event_calibration_layer().as_layer_data_tuple())))
 
         ans = tuple(l.as_layer_data_tuple() for l in self.generic_calibration_layers()) + \
                             ( self.event_calibration_layer().as_layer_data_tuple(), ) # Don't forget that comma!
-        print("KJHKJHKJHKJH", ans)
-        print("OOKJHKJHKJHKJH", len(ans))
+        #print("KJHKJHKJHKJH", ans)
+        #print("OOKJHKJHKJHKJH", len(ans))
         return ans
 
 

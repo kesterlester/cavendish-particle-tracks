@@ -112,8 +112,8 @@ class ParticleTracksWidget(QWidget):
             self._on_row_selection_changed
         )
         # Apply magnification disabled until the magnification parameters are computed
-        self.apply_magnification_button = QRadioButton("Apply magnification")
-        self.apply_magnification_button.setEnabled(False)
+        #self.apply_magnification_button = QRadioButton("Apply magnification")
+        #self.apply_magnification_button.setEnabled(False)
 
         # connect callbacks
         self.load_button.clicked.connect(self._on_click_load_data)
@@ -122,9 +122,9 @@ class ParticleTracksWidget(QWidget):
         self.length_button.clicked.connect(self._on_click_length)
         self.decay_angles_button.clicked.connect(self._on_click_decay_angles)
         #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
-        self.apply_magnification_button.toggled.connect(
-            self._on_click_apply_magnification
-        )
+        #self.apply_magnification_button.toggled.connect(
+        #    self._on_click_apply_magnification
+        #)
         self.save_data_button.clicked.connect(self._on_click_save)
 
         self.image_calibration_button.clicked.connect(self._on_click_calibration)
@@ -141,10 +141,11 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.radius_button, 2, 0)
             self.buttonbox.addWidget(self.length_button, 2, 1)
             self.buttonbox.addWidget(self.decay_angles_button, 3, 0)
-            #self.buttonbox.addWidget(self.stereoshift_button, 3, 1)
+            self.buttonbox.addWidget(self.save_data_button, 3, 1)
+            #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             self.buttonbox.addWidget(self.image_calibration_button, 4, 0)
-            self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
-            self.buttonbox.addWidget(self.save_data_button, 5, 0)
+            #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
+
 
             layout_outer = QHBoxLayout()
             self.setLayout(layout_outer)
@@ -160,7 +161,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.length_button)
             self.buttonbox.addWidget(self.decay_angles_button)
             self.buttonbox.addWidget(self.table)
-            self.buttonbox.addWidget(self.apply_magnification_button)
+            #self.buttonbox.addWidget(self.apply_magnification_button)
             #self.buttonbox.addWidget(self.stereoshift_button)
             self.buttonbox.addWidget(self.image_calibration_button)
             self.buttonbox.addWidget(self.save_data_button)
@@ -324,7 +325,7 @@ class ParticleTracksWidget(QWidget):
             self.save_data_button.setEnabled(False)
             self.image_calibration_button.setEnabled(False)
             #if ENABLE_MAG:
-            self.apply_magnification_button.setEnabled(False)
+            #self.apply_magnification_button.setEnabled(False)
 
     def _selected_points_are_on_current_slice(self, selected_points) -> bool:
         """Check that the selected points are in the current slice of the viewer"""
@@ -746,38 +747,38 @@ class ParticleTracksWidget(QWidget):
             particle.magnification_a = a
             particle.magnification_b = b
 
-    def _on_click_apply_magnification(self) -> None:
-        """Changes the visualisation of the table to show calibrated values for radius and decay_length"""
-        if self.apply_magnification_button.isChecked():
-            self._apply_magnification()
-        self._set_table_visible_vars(self.apply_magnification_button.isChecked())
+    # def _on_click_apply_magnification(self) -> None:
+    #     """Changes the visualisation of the table to show calibrated values for radius and decay_length"""
+    #     if self.apply_magnification_button.isChecked():
+    #         self._apply_magnification()
+    #     self._set_table_visible_vars(self.apply_magnification_button.isChecked())
 
-    def _apply_magnification(self) -> None:
-        """Calculates magnification and calibrated radius and length for each particle in data"""
-
-        for i in range(len(self.data)):
-            self.data[i].calibrate()
-            self.table.setItem(
-                i,
-                self._get_table_column_index("magnification"),
-                QTableWidgetItem(str(self.data[i].magnification)),
-            )
-            # if the radius has been computed before, show the calibrated value
-            if self.table.item(i, self._get_table_column_index("radius_px")) is not None:
-                self.table.setItem(
-                    i,
-                    self._get_table_column_index("radius_cm"),
-                    QTableWidgetItem(str(self.data[i].radius_cm)),
-                )
-            if (
-                self.table.item(i, self._get_table_column_index("decay_length_px"))
-                is not None
-            ):
-                self.table.setItem(
-                    i,
-                    self._get_table_column_index("decay_length_cm"),
-                    QTableWidgetItem(str(self.data[i].decay_length_cm)),
-                )
+    # def _apply_magnification(self) -> None:
+    #     """Calculates magnification and calibrated radius and length for each particle in data"""
+    #
+    #     for i in range(len(self.data)):
+    #         self.data[i].calibrate()
+    #         self.table.setItem(
+    #             i,
+    #             self._get_table_column_index("magnification"),
+    #             QTableWidgetItem(str(self.data[i].magnification)),
+    #         )
+    #         # if the radius has been computed before, show the calibrated value
+    #         if self.table.item(i, self._get_table_column_index("radius_px")) is not None:
+    #             self.table.setItem(
+    #                 i,
+    #                 self._get_table_column_index("radius_cm"),
+    #                 QTableWidgetItem(str(self.data[i].radius_cm)),
+    #             )
+    #         if (
+    #             self.table.item(i, self._get_table_column_index("decay_length_px"))
+    #             is not None
+    #         ):
+    #             self.table.setItem(
+    #                 i,
+    #                 self._get_table_column_index("decay_length_cm"),
+    #                 QTableWidgetItem(str(self.data[i].decay_length_cm)),
+    #             )
 
     def _on_click_save(self) -> None:
         """Save list of particles to csv file.
