@@ -383,6 +383,9 @@ class CalibrationManager:
             # No harm in user having control over whether it is seen or not.
             # self.event_calibration_layer().visible = False
 
+    def clone_only_this_point_view_into_table(self, idx, name, generic_calibration_layer):
+        pass # NOT YET IMPLEMENTED
+
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
         #print(f"About to clone generic fiducial {idx=} with {name=}")
         destination_layer = self.event_calibration_layer()
@@ -438,6 +441,11 @@ class CalibrationManager:
         #print(f"About to clone generic fiducial {idx=} with {name=} into event.")
         for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
             self.clone_only_this_fid_view_into_event(idx, name, generic_calibration_layer)
+
+    def clone_all_views_of_this_point_into_table(self, idx, name):
+        # print(f"About to clone generic fiducial {idx=} with {name=} into event.")
+        for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
+            self.clone_only_this_point_view_into_table(idx, name, generic_calibration_layer)
 
     def rename_point(self, idx, name, type):
         # print(f"Renaming point idx={idx} to name={name}")
@@ -656,9 +664,21 @@ After event.type='mouse_release' event.button=2
                 custom_name_menu_item.triggered.connect(custom_name_calback)
                 menu.addAction(custom_name_menu_item)
 
+                menu.addSeparator()
+                clone_into_current_process_menu_item = QAction("Insert point coords into current process for THIS VIEW...", menu)
+                clone_into_current_process_menu_item.triggered.connect(
+                    lambda _: self.clone_only_this_point_view_into_table(i, name, layer))
+                menu.addAction(clone_into_current_process_menu_item)
+
+                clone_into_current_process_menu_item = QAction("Insert point coords into current process for ALL VIEWS...",
+                                                             menu)
+                clone_into_current_process_menu_item.triggered.connect(
+                    lambda _: self.clone_all_views_of_this_point_into_table(i, name))
+                menu.addAction(clone_into_current_process_menu_item)
+
             if type_is_fiducial:
                 menu.addSeparator()
-                clone_into_current_image_menu_item = QAction("Insert ONLY THIS fiducial into current event ...", menu)
+                clone_into_current_image_menu_item = QAction("Insert ONLY THIS VIEW of this fiducial into current event ...", menu)
                 clone_into_current_image_menu_item.triggered.connect(
                     lambda _: self.clone_only_this_fid_view_into_event(i, name, layer))
                 menu.addAction(clone_into_current_image_menu_item)
