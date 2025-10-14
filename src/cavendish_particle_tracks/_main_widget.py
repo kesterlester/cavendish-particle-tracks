@@ -635,6 +635,7 @@ class ParticleTracksWidget(QWidget):
         self.viewer.add_image(concatenated_stack,
                               name=IMAGE_LAYER_NAME,
                               )
+        bubble_chamber_layer = self.viewer.layers[IMAGE_LAYER_NAME]
         self.viewer.dims.axis_labels = ("View", "Event", "Y", "X")
 
         # Move to the first event in the series
@@ -642,6 +643,9 @@ class ParticleTracksWidget(QWidget):
 
         # Create measurements layer if not already there
         self.layer_measurements = self._setup_measurement_layer()
+
+        # Move bubble chamber layer to the bottom
+        self.viewer.layers.move(self.viewer.layers.index(bubble_chamber_layer), 0)
 
         # Disable the load button after loading the data (interim solution until we can move to bottom-docked UI)
         self.load_button.setEnabled(False)
