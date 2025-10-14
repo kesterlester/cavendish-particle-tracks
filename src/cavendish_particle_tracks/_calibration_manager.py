@@ -677,16 +677,19 @@ After event.type='mouse_release' event.button=2
                 menu.addAction(custom_name_menu_item)
 
                 menu.addSeparator()
-                clone_into_current_process_menu_item = QAction("Insert point coords into current process for THIS VIEW...", menu)
-                clone_into_current_process_menu_item.triggered.connect(
-                    lambda _: self.clone_only_this_point_view_into_table(i, name, layer))
-                menu.addAction(clone_into_current_process_menu_item)
 
-                clone_into_current_process_menu_item = QAction("Insert point coords into current process for ALL VIEWS...",
+                if name=="origin" or name=="decay":
+                    clone_into_current_process_menu_item = QAction(f"Insert {name} coords into current process for THIS VIEW...", menu)
+                    clone_into_current_process_menu_item.triggered.connect(
+                        lambda _: self.clone_only_this_point_view_into_table(i, name, layer))
+                    menu.addAction(clone_into_current_process_menu_item)
+
+                    clone_into_current_process_menu_item = QAction(f"Insert {name} coords into current process for ALL VIEWS...",
                                                              menu)
-                clone_into_current_process_menu_item.triggered.connect(
-                    lambda _: self.clone_all_views_of_this_point_into_table(i, name))
-                menu.addAction(clone_into_current_process_menu_item)
+                    clone_into_current_process_menu_item.triggered.connect(
+                        lambda _: self.clone_all_views_of_this_point_into_table(i, name))
+                    menu.addAction(clone_into_current_process_menu_item)
+
 
             if type_is_fiducial:
                 menu.addSeparator()
