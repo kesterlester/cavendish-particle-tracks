@@ -14,6 +14,8 @@ At present one is not allowed to save data when the table is empty (no data) ...
 
 At the moment you can clone all forms of A' (i.e. all three views) into the event, but this may not be what you want to do!  You may only want to do it for THIS view!
 
+data-table is not marked dirty when vertex info has been added
+
 Points in the event calib layer don't show their fidicual labels.  AND there is nothing to stop many of them being created in overlap with each other.
 
 Meta is not yet checked in the calibrations dirty accounting. It should be.

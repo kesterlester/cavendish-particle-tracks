@@ -64,7 +64,12 @@ class ParticleTracksWidget(QWidget):
         dirty_things = []
         # try catch as could get a callback before we are ready!
         try:
-            table_is_dirty =  (self.data != self._data_at_last_save)
+
+            print(f"DIRTY_THINGS method of _main_widget finds that")
+            print(f"{self.data=}")
+            print("and")
+            print(f"{self._data_at_last_save=}")
+            table_is_dirty = (self.data != self._data_at_last_save)
             if table_is_dirty:
                 dirty_things.append("decay table")
         except:
@@ -103,7 +108,7 @@ class ParticleTracksWidget(QWidget):
         self.decay_angles_button = QPushButton("Calculate decay angles")
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
-        self.save_data_button = QPushButton("Save table data")
+        self.save_data_button = QPushButton("Save process table")
 
         # setup particle table
         self.table = self._set_up_table()
@@ -181,11 +186,11 @@ class ParticleTracksWidget(QWidget):
 
         # Data analysis
         self.data: list[ParticleDecay] = []
-        self._data_at_last_save = self.data.copy()
+        import copy
+        self._data_at_last_save = copy.deepcopy(self.data) # Need deepcopy as otherwise changes within ParticleData objects are not spotted!
 
-        # might not need this eventually
-        self.mag_a = -1.0
-        self.mag_b = 0.0
+        # self.mag_a = -1.0
+        # self.mag_b = 0.0
 
         # Dialog pointers to reuse
         self.mag_dlg: ImageCalibrationDialog | None = None
@@ -375,6 +380,9 @@ class ParticleTracksWidget(QWidget):
 
             if not delete:
                 x, y = xy
+                # Next two lines break a numpy link. Just seems sensible to do.
+                x = float(x)
+                y = float(y)
             else:
                 x, y = "", ""
 
@@ -819,7 +827,7 @@ class ParticleTracksWidget(QWidget):
         # TODO: This is bad. There should be no reason a user cannot save
         # an empty file. However, it seems to be here as some of the code
         # below needs to access self.data[0] to write headers!!!
-        if not len(self.data): # Disabling as no reason not to sav
+        if not len(self.data): # Disabling as no reason not to save
             napari.utils.notifications.show_error(
                 "There is no data in the table to save."
             )
@@ -869,7 +877,10 @@ class ParticleTracksWidget(QWidget):
             self.msg.show()
             return
 
-        self._data_at_last_save = self.data.copy() # mark as clean!
+        #print(f"SSSSSAAAVING BEFORE {self._data_at_last_save=}")
+        import copy
+        self._data_at_last_save = copy.deepcopy(self.data) # mark as clean!  Need deepcopy as otherwise changes within ParticleData objects are not spotted!
+        #print(f"SSSSSAAAVING AFTER {self._data_at_last_save=}")
         napari.utils.notifications.show_info("Data saved to " + file_name)
 
     # Probably no longer needed once mag and angle dialogs work same way as stereo!
