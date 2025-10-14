@@ -207,20 +207,33 @@ class ParticleTracksWidget(QWidget):
         # update for 4d implementation as appropriate.
         return (self.viewer.camera.center[1], self.viewer.camera.center[2])
 
-    def _get_selected_points(self, layer_names = [MEASUREMENTS_LAYER_NAME]) -> np.array:
+    def _get_selected_points(self, layer_names = None) -> np.array:
         """Returns array of selected points in the viewer.
         Beware that if the caller supplies layer_names with points of different dimensions in them,
         then this function will be unable to create the np.array() for the output.
         So it is the caller's responsibility to provide only layers which have points
         that are compatible with each other."""
 
+        if layer_names == None:
+            layer_names = [MEASUREMENTS_LAYER_NAME] # Always allow this layer as it is fully editable.
+
+            # By default also allow people to include a generic calibration point in the selection.
+            # However this could be annoying if fiducials keep getting selected and you don't want them to.
+            # TODO: Ask for feedback and disable the next line if people don't like it.
+            # Actually, this is broken anyway as MEASUREMENTS_LAYER has 4D poitns and GENERIC_CALIBRATION_LAYERS
+            # have 2D points, so I would need to co-erce things carefully. So completely disable for now.
+            # TODO: Fix in the long term
+            # layer_names = layer_names + self.calibration_manager.generic_calibration_layer_names()
+
         # Filtering selected layer (layer names are unique)
         points_layers = [
             layer for layer in self.viewer.layers if layer.name in layer_names
         ]
         # Returning selected points in the layer
+        list_content =  [ points_layer.data[i] for points_layer in points_layers for i in points_layer.selected_data ]
+        #print(f"Saw {list_content=}")
         selected_points = np.array(
-            [ points_layer.data[i] for points_layer in points_layers for i in points_layer.selected_data ]
+           list_content
         )
         return selected_points
 
