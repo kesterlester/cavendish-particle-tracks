@@ -34,59 +34,59 @@ def length(a: Point, b: Point) -> float:
     pb = np.array(b)
     return np.linalg.norm(pa - pb)
 
-def magnification(front_fiducial_1: Fiducial, front_fiducial_2: Fiducial,
-                  back_fiducial_1: Fiducial, back_fiducial_2: Fiducial):
-    """
-    This method calculates parameters "a" and "b" which carry information about how transverse image measurements in
-    pixels relate to real world displacements in cm as function of feature depth within the chamber.
-
-    The parameter "a" has units of "cm/pixel". It is the number of cm per pixel for transverse features seem at the
-    front of the chamber.
-
-    The parameter "b" has units of "/pixel".  The parameter b is defined such that the expression
-
-        cm_per_pixel_at_depth_z = a + b*z
-
-    will supply the number of cm per pixel for transverse features which are z cm from the front of the chamber.
-    For example
-
-        a + b*CHAMBER_DEPTH
-
-    would be the number of cm per pixel for transverse features at the chamber rear
-    if CHAMBER_DEPTH were in cm.
-
-    If the cameras did not move during the data taking, and if the film digitisation process did not introduce
-    scale variations between images, and if all cameras were the same distance from the chamber, then to first order
-    (e.g. ignoring lens curvature distortions) the pair (a,b) should be a property of the experiment, rather than a
-    property of a certain view, or of a certain events in a certain view. Nonetheless, (a,b) could be re-measured over
-    multiple views or multiple events to test these conditions and/or to better constrain them.
-    """
-
-    cm_coords_front_fiducial_1 = np.array(FIDUCIAL_FRONT[front_fiducial_1.name])
-    cm_coords_front_fiducial_2 = np.array(FIDUCIAL_FRONT[front_fiducial_2.name])
-    cm_coords_back_fiducial_1 = np.array(FIDUCIAL_BACK[back_fiducial_1.name])
-    cm_coords_back_fiducial_2 = np.array(FIDUCIAL_BACK[back_fiducial_2.name])
-
-    cm_displacement_between_front_fiducials = \
-        np.linalg.norm(cm_coords_front_fiducial_1 - cm_coords_front_fiducial_2)
-
-    cm_displacement_between_back_fiducials = \
-        np.linalg.norm(cm_coords_back_fiducial_1 - cm_coords_back_fiducial_2)
-
-    pixel_displacement_between_front_fiducials = \
-        np.linalg.norm(front_fiducial_1.xy - front_fiducial_2.xy)
-
-    pixel_displacement_between_back_fiducials = \
-        np.linalg.norm(back_fiducial_1.xy - back_fiducial_2.xy)
-
-    cm_per_pixel_at_chamber_front = cm_displacement_between_front_fiducials / pixel_displacement_between_front_fiducials
-    cm_per_pixel_at_chamber_back = cm_displacement_between_back_fiducials / pixel_displacement_between_back_fiducials
-
-    a = cm_per_pixel_at_chamber_front
-
-    b = (cm_per_pixel_at_chamber_back - cm_per_pixel_at_chamber_front) / CHAMBER_DEPTH
-
-    return a, b
+# def magnification(front_fiducial_1: Fiducial, front_fiducial_2: Fiducial,
+#                   back_fiducial_1: Fiducial, back_fiducial_2: Fiducial):
+#     """
+#     This method calculates parameters "a" and "b" which carry information about how transverse image measurements in
+#     pixels relate to real world displacements in cm as function of feature depth within the chamber.
+#
+#     The parameter "a" has units of "cm/pixel". It is the number of cm per pixel for transverse features seem at the
+#     front of the chamber.
+#
+#     The parameter "b" has units of "/pixel".  The parameter b is defined such that the expression
+#
+#         cm_per_pixel_at_depth_z = a + b*z
+#
+#     will supply the number of cm per pixel for transverse features which are z cm from the front of the chamber.
+#     For example
+#
+#         a + b*CHAMBER_DEPTH
+#
+#     would be the number of cm per pixel for transverse features at the chamber rear
+#     if CHAMBER_DEPTH were in cm.
+#
+#     If the cameras did not move during the data taking, and if the film digitisation process did not introduce
+#     scale variations between images, and if all cameras were the same distance from the chamber, then to first order
+#     (e.g. ignoring lens curvature distortions) the pair (a,b) should be a property of the experiment, rather than a
+#     property of a certain view, or of a certain events in a certain view. Nonetheless, (a,b) could be re-measured over
+#     multiple views or multiple events to test these conditions and/or to better constrain them.
+#     """
+#
+#     cm_coords_front_fiducial_1 = np.array(FIDUCIAL_FRONT[front_fiducial_1.name])
+#     cm_coords_front_fiducial_2 = np.array(FIDUCIAL_FRONT[front_fiducial_2.name])
+#     cm_coords_back_fiducial_1 = np.array(FIDUCIAL_BACK[back_fiducial_1.name])
+#     cm_coords_back_fiducial_2 = np.array(FIDUCIAL_BACK[back_fiducial_2.name])
+#
+#     cm_displacement_between_front_fiducials = \
+#         np.linalg.norm(cm_coords_front_fiducial_1 - cm_coords_front_fiducial_2)
+#
+#     cm_displacement_between_back_fiducials = \
+#         np.linalg.norm(cm_coords_back_fiducial_1 - cm_coords_back_fiducial_2)
+#
+#     pixel_displacement_between_front_fiducials = \
+#         np.linalg.norm(front_fiducial_1.xy - front_fiducial_2.xy)
+#
+#     pixel_displacement_between_back_fiducials = \
+#         np.linalg.norm(back_fiducial_1.xy - back_fiducial_2.xy)
+#
+#     cm_per_pixel_at_chamber_front = cm_displacement_between_front_fiducials / pixel_displacement_between_front_fiducials
+#     cm_per_pixel_at_chamber_back = cm_displacement_between_back_fiducials / pixel_displacement_between_back_fiducials
+#
+#     a = cm_per_pixel_at_chamber_front
+#
+#     b = (cm_per_pixel_at_chamber_back - cm_per_pixel_at_chamber_front) / CHAMBER_DEPTH
+#
+#     return a, b
 
 
 def stereoshift(fa: Point, fb: Point, pa: Point, pb: Point):

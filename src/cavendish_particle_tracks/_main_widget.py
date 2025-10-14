@@ -239,7 +239,7 @@ class ParticleTracksWidget(QWidget):
         """
         np = ParticleDecay()
         self.columns = list(np.vars_to_save())
-        self.columns += ["magnification"]
+        # self.columns += ["magnification"]
         self.columns_show_calibrated = np.vars_to_show(True)
         self.columns_show_uncalibrated = np.vars_to_show(False)
         out = QTableWidget(0, len(self.columns))
@@ -426,14 +426,14 @@ class ParticleTracksWidget(QWidget):
             )
 
             ## Add the calibrated radius to the table
-            self.data[selected_row].radius_cm = (
-                self.data[selected_row].magnification * self.data[selected_row].radius_px
-            )
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("radius_cm"),
-                QTableWidgetItem(str(self.data[selected_row].radius_cm)),
-            )
+            #self.data[selected_row].radius_cm = (
+            #    self.data[selected_row].magnification * self.data[selected_row].radius_px
+            #)
+            #self.table.setItem(
+            #    selected_row,
+            #    self._get_table_column_index("radius_cm"),
+            #    QTableWidgetItem(str(self.data[selected_row].radius_cm)),
+            #)
 
             napari.utils.notifications.show_info(
                 "Radius added to particle " + str(selected_row)
@@ -494,15 +494,15 @@ class ParticleTracksWidget(QWidget):
             )
 
             ## Add the calibrated decay length to the table
-            self.data[selected_row].decay_length_cm = (
-                self.data[selected_row].magnification
-                * self.data[selected_row].decay_length_px
-            )
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("decay_length_cm"),
-                QTableWidgetItem(str(self.data[selected_row].decay_length_cm)),
-            )
+            #self.data[selected_row].decay_length_cm = (
+            #    self.data[selected_row].magnification
+            #    * self.data[selected_row].decay_length_px
+            #)
+            #self.table.setItem(
+            #    selected_row,
+            #    self._get_table_column_index("decay_length_cm"),
+            #    QTableWidgetItem(str(self.data[selected_row].decay_length_cm)),
+            #)
 
             napari.utils.notifications.show_info(
                 "Decay length added to particle " + str(selected_row)
@@ -677,8 +677,8 @@ class ParticleTracksWidget(QWidget):
         # ascii_name = EXPECTED_PROCESSES_NICE_TO_ASCII[nice_name]
         new_particle.name = nice_name
         new_particle.index = self.particle_decays_menu.currentIndex()
-        new_particle.magnification_a = self.mag_a
-        new_particle.magnification_b = self.mag_b
+        #new_particle.magnification_a = self.mag_a
+        #new_particle.magnification_b = self.mag_b
 
         # Record the event and view number if the data has been loaded
         # Potentially this could be used to check the measurements are done in the right event
@@ -707,11 +707,11 @@ class ParticleTracksWidget(QWidget):
             self._get_table_column_index("event_number"),
             QTableWidgetItem(str(new_particle.event_number)),
         )
-        self.table.setItem(
-            self.table.rowCount() - 1,
-            self._get_table_column_index("magnification"),
-            QTableWidgetItem(str(new_particle.magnification)),
-        )
+        #self.table.setItem(
+        #    self.table.rowCount() - 1,
+        #    self._get_table_column_index("magnification"),
+        #    QTableWidgetItem(str(new_particle.magnification)),
+        #)
 
         print(self.data[-1])
         self.particle_decays_menu.setCurrentIndex(0)
@@ -735,7 +735,7 @@ class ParticleTracksWidget(QWidget):
                 self.table.removeRow(selected_row)
 
     def _on_click_calibration(self) -> ImageCalibrationDialog:
-        """When the 'Calculate magnification' button is clicked, open the magnification dialog"""
+        """When the 'image calibratiob' button is clicked, open the image calibration dialog"""
         if self.mag_dlg is None:
             self.mag_dlg = ImageCalibrationDialog(self)
 
@@ -743,13 +743,13 @@ class ParticleTracksWidget(QWidget):
         self.mag_dlg.raise_()
         return self.mag_dlg
 
-    def _propagate_magnification(self, a: float, b: float) -> None:
-        """Assigns a and b to the class magnification parameters and to each of the particles in data"""
-        self.mag_a = a
-        self.mag_b = b
-        for particle in self.data:
-            particle.magnification_a = a
-            particle.magnification_b = b
+    # def _propagate_magnification(self, a: float, b: float) -> None:
+    #     """Assigns a and b to the class magnification parameters and to each of the particles in data"""
+    #     self.mag_a = a
+    #     self.mag_b = b
+    #     for particle in self.data:
+    #         particle.magnification_a = a
+    #         particle.magnification_b = b
 
     # def _on_click_apply_magnification(self) -> None:
     #     """Changes the visualisation of the table to show calibrated values for radius and decay_length"""

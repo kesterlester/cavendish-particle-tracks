@@ -172,13 +172,13 @@ class ParticleDecay:
     _r2: list[float] = field(default_factory=lambda: [0.0, 0.0])
     _r3: list[float] = field(default_factory=lambda: [0.0, 0.0])
     radius_px: float = -1.0
-    radius_cm: float = -1.0
+    # radius_cm: float = -1.0
     _d1: list[float] = field(default_factory=lambda: [0.0, 0.0])
     _d2: list[float] = field(default_factory=lambda: [0.0, 0.0])
     decay_length_px: float = -1.0
-    decay_length_cm: float = -1.0
-    magnification_a: float = -1.0
-    magnification_b: float = 0.0
+    #decay_length_cm: float = -1.0
+    #magnification_a: float = -1.0
+    #magnification_b: float = 0.0
     origin_vertex_stereoshift_info: StereoshiftInfo = field(
         default_factory=StereoshiftInfo
     )
@@ -202,35 +202,22 @@ class ParticleDecay:
     decay_v2_y: str = ""
 
     def vars_to_show(self, calibrated=False):
-        if calibrated:  # TODO: This is a mess!! Some particles may be calibrated and others not. And why not write out radius_px always in case re-anaalysis is needed later. Just always write out everything.
-            return [
-                "event_number",
-                "name",
-                "radius_cm",
-                "decay_length_cm",
-                "origin_vertex_depth_cm",
-                "decay_vertex_depth_cm",
-                "magnification",
-                "phi_proton",
-                "phi_pion",
-            ]
-        else:
-            return [
-                "event_number",
-                "name",
-                "radius_px",
-                "decay_length_px",
-                "origin_vertex_depth_cm",
-                "decay_vertex_depth_cm",
-                "magnification",
-                "phi_proton",
-                "phi_pion",
-            ]
+        return [
+            "event_number",
+            "name",
+            "radius_px",
+            "decay_length_px",
+            #"origin_vertex_depth_cm",
+            #"decay_vertex_depth_cm",
+            # "magnification",
+            "phi_proton",
+            "phi_pion",
+        ]
 
     def vars_to_save(self):
         """Variable to save in the output file, all for the moment"""
         vars_to_save = [var for var in self.__dict__ if var[0] != "_"]
-        vars_to_save += ["origin_vertex_depth_cm", "decay_vertex_depth_cm"]
+        #vars_to_save += ["origin_vertex_depth_cm", "decay_vertex_depth_cm"]
         vars_to_save += ["rpoints", "dpoints"]
         # vars_to_save += ["origin_v0_x"]
         # vars_to_save += ["origin_v0_y"]
@@ -267,25 +254,26 @@ class ParticleDecay:
             point[0] = values[i][0]
             point[1] = values[i][1]
 
-    @property
-    def origin_vertex_depth_cm(self):
-        return self.origin_vertex_stereoshift_info.depth_cm
+    #@property
+    #def origin_vertex_depth_cm(self):
+    #    return self.origin_vertex_stereoshift_info.depth_cm
 
-    @property
-    def decay_vertex_depth_cm(self):
-        return self.decay_vertex_stereoshift_info.depth_cm
+    #@property
+    #def decay_vertex_depth_cm(self):
+    #    return self.decay_vertex_stereoshift_info.depth_cm
 
     @property
     def average_depth_cm(self):
         return self.origin_vertex_stereoshift_info.depth_cm
 
-    @property
-    def magnification(self):
-        return self.magnification_a + self.magnification_b * self.average_depth_cm
+    #@property
+    #def magnification(self):
+    #    return self.magnification_a + self.magnification_b * self.average_depth_cm
 
-    def calibrate(self) -> None:
-        self.radius_cm = self.magnification * self.radius_px
-        self.decay_length_cm = self.magnification * self.decay_length_px
+    def calibrate(self) -> None: # TODO: Try to remove this method
+        pass
+        #self.radius_cm = self.magnification * self.radius_px
+        #self.decay_length_cm = self.magnification * self.decay_length_px
 
     def to_csv(self):
         mystring = ""

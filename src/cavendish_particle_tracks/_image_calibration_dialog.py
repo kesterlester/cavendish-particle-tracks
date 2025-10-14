@@ -12,7 +12,7 @@ from qtpy.QtWidgets import (
     QTableWidgetItem,
 )
 
-from ._calculate import magnification
+# from ._calculate import magnification
 from ._calibration_manager import PER_IMAGE_CALIBRATION_LAYER_NAME
 from .non_overlapping_dialog import NonOverlappingQDialog
 from .analysis import (
