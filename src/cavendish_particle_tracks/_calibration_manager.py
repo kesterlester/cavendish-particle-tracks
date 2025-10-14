@@ -717,11 +717,11 @@ After event.type='mouse_release' event.button=2
         fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
 
         # First position the point being measured:
-        labels = [ "point", ]
-        symbols = [ "disc", ]
-        colours = ["cyan", ]
-        types = ["point", ]
-        points_in_generic_view = [ [origin_x, point_origin_y, ], ]
+        labels = [ "origin", "decay", ]
+        symbols = [ "disc", "disc", ]
+        colours = ["cyan", "cyan", ]
+        types = ["point", "point"]
+        points_in_generic_view = [ [origin_x, point_origin_y-0.5*fid_step_y, ],   [origin_x, point_origin_y+0.5*fid_step_y, ],  ]
 
         # Now position the Front/Back fiducial pairs:
         for i in range(CalibrationManager.num_generic_front_back_fid_pairs):
