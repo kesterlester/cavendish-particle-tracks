@@ -103,7 +103,7 @@ class ParticleTracksWidget(QWidget):
         self.decay_angles_button = QPushButton("Calculate decay angles")
         self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
-        self.save_data_button = QPushButton("Save")
+        self.save_data_button = QPushButton("Save recorded processes")
 
         # setup particle table
         self.table = self._set_up_table()
