@@ -4,8 +4,6 @@ Also the way _setup_calibration_layers is used in _calibration manager is really
 
 We would like to persistify points like start or decay vertices in the calibration file. However this would require creation of stable process IDs which do not currently exist.
 
-Should add ability to remove origin/ecay vertex from current process.
-
 When image data is loaded late, the bubble chamber layer becomes very large.
 
 The process table seems to have a visual part and an internal data part, and the two are kept in sync by duplicate insertions and removals. This seems fragile.  Much better owuld be to have one core representation and multiple views of it.
@@ -17,8 +15,6 @@ At present one is not allowed to save data when the table is empty (no data) ...
 At the moment you can clone all forms of A' (i.e. all three views) into the event, but this may not be what you want to do!  You may only want to do it for THIS view!
 
 Points in the event calib layer don't show their fidicual labels.  AND there is nothing to stop many of them being created in overlap with each other.
-
-Users should be able to choose where calibrations get saved.
 
 Meta is not yet checked in the calibrations dirty accounting. It should be.
 

@@ -383,7 +383,7 @@ class CalibrationManager:
             # No harm in user having control over whether it is seen or not.
             # self.event_calibration_layer().visible = False
 
-    def clone_only_this_point_view_into_table(self, idx, name, generic_calibration_layer):
+    def clone_only_this_point_view_into_table(self, idx, name, generic_calibration_layer, delete=False):
         #Find point xy in pixels
         xy = generic_calibration_layer.data[idx]
 
@@ -393,11 +393,14 @@ class CalibrationManager:
         print(f"Clone thinks point has {view=} and {xy=}.")
 
         if name == "origin":
-            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=True)
+            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=True, delete=delete)
         elif name == "decay":
-            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=False)
+            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=False, delete=delete)
         else:
-            napari.utils.notifications.show_error('Label the point as either "origin" or "decay" before inserting!')
+            if delete:
+                napari.utils.notifications.show_error('Label the point as either "origin" or "decay" before using it to delete data from the table!')
+            else:
+                napari.utils.notifications.show_error('Label the point as either "origin" or "decay" before inserting into table!')
 
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
         #print(f"About to clone generic fiducial {idx=} with {name=}")
@@ -454,10 +457,10 @@ class CalibrationManager:
         for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
             self.clone_only_this_fid_view_into_event(idx, name, generic_calibration_layer)
 
-    def clone_all_views_of_this_point_into_table(self, idx, name):
+    def clone_all_views_of_this_point_into_table(self, idx, name, delete=False):
         # print(f"About to clone generic fiducial {idx=} with {name=} into event.")
         for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
-            self.clone_only_this_point_view_into_table(idx, name, generic_calibration_layer)
+            self.clone_only_this_point_view_into_table(idx, name, generic_calibration_layer, delete=delete)
 
     def rename_point(self, idx, name, type):
         # print(f"Renaming point idx={idx} to name={name}")
@@ -679,7 +682,8 @@ After event.type='mouse_release' event.button=2
                 menu.addSeparator()
 
                 if name=="origin" or name=="decay":
-                    clone_into_current_process_menu_item = QAction(f"Insert {name} coords into current process for THIS VIEW...", menu)
+
+                    clone_into_current_process_menu_item = QAction(f"Insert {name} coords into current process for THIS VIEW ONLY...", menu)
                     clone_into_current_process_menu_item.triggered.connect(
                         lambda _: self.clone_only_this_point_view_into_table(i, name, layer))
                     menu.addAction(clone_into_current_process_menu_item)
@@ -688,6 +692,21 @@ After event.type='mouse_release' event.button=2
                                                              menu)
                     clone_into_current_process_menu_item.triggered.connect(
                         lambda _: self.clone_all_views_of_this_point_into_table(i, name))
+                    menu.addAction(clone_into_current_process_menu_item)
+
+                    menu.addSeparator()
+
+                    clone_into_current_process_menu_item = QAction(
+                        f"Delete {name} coords from current process for THIS VIEW ONLY...", menu)
+                    clone_into_current_process_menu_item.triggered.connect(
+                        lambda _: self.clone_only_this_point_view_into_table(i, name, layer, delete=True))
+                    menu.addAction(clone_into_current_process_menu_item)
+
+                    clone_into_current_process_menu_item = QAction(
+                        f"Delete {name} coords from current process for ALL VIEWS...",
+                        menu)
+                    clone_into_current_process_menu_item.triggered.connect(
+                        lambda _: self.clone_all_views_of_this_point_into_table(i, name, delete=True))
                     menu.addAction(clone_into_current_process_menu_item)
 
 

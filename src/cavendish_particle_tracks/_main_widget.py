@@ -358,6 +358,7 @@ class ParticleTracksWidget(QWidget):
                                     xy,
                                     view,
                                     is_origin_vertex : bool, # False implies is_decay_vertex
+                                    delete = False,
                                     ):
         try:
             selected_row = self._get_selected_row()
@@ -365,10 +366,19 @@ class ParticleTracksWidget(QWidget):
             napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
             return
         else:
-            napari.utils.notifications.show_info(f"Adding coords {xy} to row {selected_row} of table for view {view}.")
+            if delete:
+                napari.utils.notifications.show_info(
+                    f"Deleting coords {xy} from row {selected_row+1} of table for view {view}.")
+            else:
+                napari.utils.notifications.show_info(
+                    f"Adding coords {xy} to row {selected_row+1} of table for view {view}.")
 
-            x, y = xy
-            print(f"got {x=} and {y=} when {xy=}")
+            if not delete:
+                x, y = xy
+            else:
+                x, y = "", ""
+
+            #print(f"put_xy_and_view_into_table will be using {x=} and {y=} when {xy=} as {delete=}")
 
             if is_origin_vertex:
                 if view == 0:
