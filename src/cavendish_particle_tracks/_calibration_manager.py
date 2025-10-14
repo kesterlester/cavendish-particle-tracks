@@ -193,7 +193,7 @@ class CalibrationManager:
             tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view1,
             tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view2,
             tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_generic,
-            open("CPT_image_calibrations.csv", "w") as output_csv_file,
+            #open("CPT_image_calibrations.csv", "w") as output_csv_file,
         ):
             #f_view0 = self.filename_for_generic_calibration_layer(0)
             #f_view1 = self.filename_for_generic_calibration_layer(1)
@@ -212,7 +212,10 @@ class CalibrationManager:
             for f in tmp_files:
                 f.seek(0) # Rewind the files so that they are flushed and may be read from the front.
 
-            self.merge_calibration_files(f_views, f_generic, output_csv_file)
+            from .merge_unmerge_csv import merge
+
+            merge(f_view0, f_view1, f_view2, f_generic, "CPT_image_calibrations.csv" )
+            #self.merge_calibration_files(f_views, f_generic, output_csv_file)
 
         self.mark_clean()
         print(f"Saved calibrations.")
@@ -221,7 +224,7 @@ class CalibrationManager:
         tmp_files = f_views + (f_generic,)
         for tmp_file in tmp_files:
             for line in tmp_file:
-                output_csv_file.write(line) 
+                output_csv_file.write(line)
 
     def save_calibrations_to_separate_files(self, f_views, f_generic):
         assert len(f_views) == len(VIEW_NAMES)
