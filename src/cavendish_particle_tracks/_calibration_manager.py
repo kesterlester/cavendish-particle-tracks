@@ -200,8 +200,10 @@ class CalibrationManager:
 
     def load_calibration(self):
 
+        files_to_read_from = [ self.filename_for_generic_calibration_layer(v) for v in view_indices ]
+        
         # Read the generic calibration points layers
-        self._setup_calibration_layers(read_from_file=True)
+        self._setup_calibration_layers(files_to_read_from = files_to_read_from )
 
         # Read the per-event calibration layers:
         layer_with_data_and_props = read_CPT_points_layer_from_csv(self.filename_for_event_calibration_layer())
@@ -242,7 +244,7 @@ class CalibrationManager:
             from .merge_unmerge_csv import merge
 
             output_csv_filename = self.choose_filename_for_CPT_image_calibrations()
-            
+
             merge(f_view0, f_view1, f_view2, f_generic, output_csv_filename )
             #self.merge_calibration_files(f_views, f_generic, output_csv_file)
 
@@ -737,14 +739,14 @@ After event.type='mouse_release' event.button=2
 
         return layers
 
-    def _get_generic_calibration_layers_from_file(self):
+    def _get_generic_calibration_layers_from_file(self, files_to_read_from):
         layers = []
 
-        for v in view_indices:
+        for v, filename in zip(view_indices, files_to_read_from):
 
             from .io import read_csv_with_constructors
 
-            filename = self.filename_for_generic_calibration_layer(v)
+            #filename = self.filename_for_generic_calibration_layer(v)
 
             Point = lambda x, y : np.array([float(x),float(y)])
             constructors = [
@@ -805,10 +807,10 @@ After event.type='mouse_release' event.button=2
         }
         return layer
 
-    def _setup_calibration_layers(self, read_from_file=False):
+    def _setup_calibration_layers(self, files_to_read_from=None):
 
-        if read_from_file:
-            layers = self._get_generic_calibration_layers_from_file()
+        if files_to_read_from is not None:
+            layers = self._get_generic_calibration_layers_from_file(files_to_read_from)
         else:
             layers = self._default_generic_calibration_layers()
 
