@@ -352,6 +352,8 @@ class ParticleTracksWidget(QWidget):
         else:
             napari.utils.notifications.show_info(f"Adding coords {xy} to row {selected_row} of table for view {view}.")
 
+        # HERE
+
 
     def _on_click_radius(self) -> None:
         """When the 'Calculate radius' button is clicked, calculate the radius
