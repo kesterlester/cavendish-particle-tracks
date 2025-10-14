@@ -185,18 +185,18 @@ class ParticleDecay:
     phi_proton: float = -100
     phi_pion: float = -100
 
-    origin_v0_x = ""
-    origin_v0_y = ""
-    origin_v1_x = ""
-    origin_v1_y = ""
-    origin_v2_x = ""
-    origin_v2_y = ""
-    decay_v0_x = ""
-    decay_v0_y = ""
-    decay_v1_x = ""
-    decay_v1_y = ""
-    decay_v2_x = ""
-    decay_v2_y = ""
+    origin_v0_x: str = ""
+    origin_v0_y: str = ""
+    origin_v1_x: str = ""
+    origin_v1_y: str = ""
+    origin_v2_x: str = ""
+    origin_v2_y: str = ""
+    decay_v0_x: str = ""
+    decay_v0_y: str = ""
+    decay_v1_x: str = ""
+    decay_v1_y: str = ""
+    decay_v2_x: str = ""
+    decay_v2_y: str = ""
 
     def vars_to_show(self, calibrated=False):
         if calibrated:  # TODO: This is a mess!! Some particles may be calibrated and others not. And why not write out radius_px always in case re-anaalysis is needed later. Just always write out everything.
@@ -229,18 +229,18 @@ class ParticleDecay:
         vars_to_save = [var for var in self.__dict__ if var[0] != "_"]
         vars_to_save += ["origin_vertex_depth_cm", "decay_vertex_depth_cm"]
         vars_to_save += ["rpoints", "dpoints"]
-        vars_to_save += ["origin_v0_x"]
-        vars_to_save += ["origin_v0_y"]
-        vars_to_save += ["origin_v1_x"]
-        vars_to_save += ["origin_v1_y"]
-        vars_to_save += ["origin_v2_x"]
-        vars_to_save += ["origin_v2_y"]
-        vars_to_save += ["decay_v0_x"]
-        vars_to_save += ["decay_v0_y"]
-        vars_to_save += ["decay_v1_x"]
-        vars_to_save += ["decay_v1_y"]
-        vars_to_save += ["decay_v2_x"]
-        vars_to_save += ["decay_v2_y"]
+        # vars_to_save += ["origin_v0_x"]
+        # vars_to_save += ["origin_v0_y"]
+        # vars_to_save += ["origin_v1_x"]
+        # vars_to_save += ["origin_v1_y"]
+        # vars_to_save += ["origin_v2_x"]
+        # vars_to_save += ["origin_v2_y"]
+        # vars_to_save += ["decay_v0_x"]
+        # vars_to_save += ["decay_v0_y"]
+        # vars_to_save += ["decay_v1_x"]
+        # vars_to_save += ["decay_v1_y"]
+        # vars_to_save += ["decay_v2_x"]
+        # vars_to_save += ["decay_v2_y"]
 
         return vars_to_save
 

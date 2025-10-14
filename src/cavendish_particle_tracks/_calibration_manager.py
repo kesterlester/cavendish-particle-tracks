@@ -392,8 +392,12 @@ class CalibrationManager:
             generic_calibration_layer.name)  # names are unique
         print(f"Clone thinks point has {view=} and {xy=}.")
 
-        self.parent.put_xy_and_view_into_table(xy, view, is_production_vertex=True)
-
+        if name == "origin":
+            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=True)
+        elif name == "decay":
+            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=False)
+        else:
+            napari.utils.notifications.show_error('Label the point as either "origin" or "decay" before inserting!')
 
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
         #print(f"About to clone generic fiducial {idx=} with {name=}")
@@ -643,7 +647,7 @@ After event.type='mouse_release' event.button=2
             elif type == "back":
                 fixed_names = list(FIDUCIAL_BACK.keys())
             else:
-                fixed_names = ["start", "stop", "other"]
+                fixed_names = ["origin", "decay", ]
 
             # add fixed names
             for fname in fixed_names:
