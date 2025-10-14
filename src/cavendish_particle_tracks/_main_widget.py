@@ -38,6 +38,8 @@ from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PROCESSES, VIEW_NAMES, ParticleDecay
 
+ENABLE_MAG = False
+
 MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
 IMAGE_LAYER_NAME = "Bubble Chamber Data"
 
@@ -321,6 +323,7 @@ class ParticleTracksWidget(QWidget):
             self.stereoshift_button.setEnabled(False)
             self.save_data_button.setEnabled(False)
             self.image_calibration_button.setEnabled(False)
+            #if ENABLE_MAG:
             self.apply_magnification_button.setEnabled(False)
 
     def _selected_points_are_on_current_slice(self, selected_points) -> bool:
