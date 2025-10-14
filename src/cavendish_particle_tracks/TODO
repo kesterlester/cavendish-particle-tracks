@@ -1,5 +1,7 @@
 Use of git add src/cavendish_particle_tracks/merge_unmerge_csv.py merges CSV files (made from pds) into one bigger CSV file. It would be much better to merge in pandas and then write a single CSV file, skipping the internal roundrripping via CSV.  Should fix in long term but no time now.
 
+Also the way _setup_calibration_layers is used in _calibration manager is really icky. (it is half defauly constructor, half load from file, it is a mess). Fix
+
 Move most simple messages to the same format used after successful file save: napari.utils.notifications.show_info("Data saved to " + file_name)
 
 At present one is not allowed to save data when the table is empty (no data) ... even though the "you have unsaved data" may trigger if there were previous rows that have since been deleted. Getting rid of the inability to save empty data would be good!

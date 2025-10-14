@@ -175,8 +175,13 @@ class CalibrationManager:
         return self.generic_calibration_layers() + [ self.event_calibration_layer() ]
 
     def load_calibration(self):
+
+    
+
+        # Read the generic calibration points layers
         self._setup_calibration_layers(read_from_file=True)
 
+        # Read the per-event calibration layers:
         layer_with_data_and_props = read_CPT_points_layer_from_csv(self.filename_for_event_calibration_layer())
 
         self.event_calibration_layer().data = layer_with_data_and_props.data
