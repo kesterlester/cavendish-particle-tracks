@@ -262,16 +262,10 @@ class CalibrationManager:
             output_csv_filename = self.choose_filename_for_CPT_image_calibrations(save=True)
 
             merge(f_view0, f_view1, f_view2, f_generic, output_csv_filename )
-            #self.merge_calibration_files(f_views, f_generic, output_csv_file)
 
         self.mark_clean()
         print(f"Saved calibrations.")
 
-    def merge_calibration_files(self, f_views, f_generic, output_csv_file):
-        tmp_files = f_views + (f_generic,)
-        for tmp_file in tmp_files:
-            for line in tmp_file:
-                output_csv_file.write(line)
 
     def save_calibrations_to_separate_files(self, f_views, f_generic):
         assert len(f_views) == len(VIEW_NAMES)
