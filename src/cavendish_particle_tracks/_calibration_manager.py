@@ -3,6 +3,7 @@ import numpy as np
 import napari
 import tempfile
 import pandas as pd
+from napari.layers.utils.stack_utils import stack_to_images
 
 from qtpy.QtWidgets import (
     QComboBox,
@@ -174,9 +175,30 @@ class CalibrationManager:
         # A simple python list of napari points layers.
         return self.generic_calibration_layers() + [ self.event_calibration_layer() ]
 
-    def load_calibration(self):
 
-    
+    @staticmethod
+    def choose_filename_for_CPT_image_calibrations(default_name="CPT_image_calibrations.csv"):
+        """
+        Opens a 'Save As' dialog for CSV files and returns the selected path (str),
+        or None if the user cancels.
+        """
+        from qtpy.QtWidgets import QFileDialog
+
+        # Filter ensures only .csv is shown/suggested
+        file_path, _ = QFileDialog.getSaveFileName(
+            parent=None,
+            caption="Save CSV File As...",
+            directory=default_name,
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        # Ensure the file has a .csv extension
+        if file_path and not file_path.lower().endswith(".csv"):
+            file_path += ".csv"
+
+        return file_path or None
+
+    def load_calibration(self):
 
         # Read the generic calibration points layers
         self._setup_calibration_layers(read_from_file=True)
@@ -219,7 +241,9 @@ class CalibrationManager:
 
             from .merge_unmerge_csv import merge
 
-            merge(f_view0, f_view1, f_view2, f_generic, "CPT_image_calibrations.csv" )
+            output_csv_filename = self.choose_filename_for_CPT_image_calibrations()
+            
+            merge(f_view0, f_view1, f_view2, f_generic, output_csv_filename )
             #self.merge_calibration_files(f_views, f_generic, output_csv_file)
 
         self.mark_clean()
