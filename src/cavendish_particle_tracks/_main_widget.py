@@ -350,32 +350,33 @@ class ParticleTracksWidget(QWidget):
             selected_row = self._get_selected_row()
         except IndexError:
             napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
+            return
         else:
             napari.utils.notifications.show_info(f"Adding coords {xy} to row {selected_row} of table for view {view}.")
 
-        x, y = xy
-        print(f"got {x=} and {y=} when {xy=}")
+            x, y = xy
+            print(f"got {x=} and {y=} when {xy=}")
 
-        if is_origin_vertex:
-            if view == 0:
-                self.data[selected_row].origin_v0_x = x
-                self.data[selected_row].origin_v0_y = y
-            if view == 1:
-                self.data[selected_row].origin_v1_x = x
-                self.data[selected_row].origin_v1_y = y
-            if view == 2:
-                self.data[selected_row].origin_v2_x = x
-                self.data[selected_row].origin_v2_y = y
-        else: # decay vertex
-            if view == 0:
-                self.data[selected_row].decay_v0_x = x
-                self.data[selected_row].decay_v0_y = y
-            if view == 1:
-                self.data[selected_row].decay_v1_x = x
-                self.data[selected_row].decay_v1_y = y
-            if view == 2:
-                self.data[selected_row].decay_v2_x = x
-                self.data[selected_row].decay_v2_y = y
+            if is_origin_vertex:
+                if view == 0:
+                    self.data[selected_row].origin_v0_x = x
+                    self.data[selected_row].origin_v0_y = y
+                if view == 1:
+                    self.data[selected_row].origin_v1_x = x
+                    self.data[selected_row].origin_v1_y = y
+                if view == 2:
+                    self.data[selected_row].origin_v2_x = x
+                    self.data[selected_row].origin_v2_y = y
+            else: # decay vertex
+                if view == 0:
+                    self.data[selected_row].decay_v0_x = x
+                    self.data[selected_row].decay_v0_y = y
+                if view == 1:
+                    self.data[selected_row].decay_v1_x = x
+                    self.data[selected_row].decay_v1_y = y
+                if view == 2:
+                    self.data[selected_row].decay_v2_x = x
+                    self.data[selected_row].decay_v2_y = y
 
     def _on_click_radius(self) -> None:
         """When the 'Calculate radius' button is clicked, calculate the radius
@@ -404,6 +405,7 @@ class ParticleTracksWidget(QWidget):
             selected_row = self._get_selected_row()
         except IndexError:
             napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
+            return
         else:
             print(
                 f"Adding points to the table: {selected_points_xy}"
@@ -475,6 +477,7 @@ class ParticleTracksWidget(QWidget):
             selected_row = self._get_selected_row()
         except IndexError:
             napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
+            return
         else:
 
             print(f"Adding points to the table: {selected_points_xy}")
@@ -722,6 +725,7 @@ class ParticleTracksWidget(QWidget):
             selected_row = self._get_selected_row()
         except IndexError:
             napari.utils.notifications.show_error("The table of processes is empty so no process can be deleted.")
+            return
         else:
             confirmation_dialog = QMessageBox()
             confirmation_dialog.setText("Deleting selected particle")
