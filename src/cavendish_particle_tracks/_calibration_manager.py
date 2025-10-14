@@ -214,11 +214,15 @@ class CalibrationManager:
         # New adaptive method:
         input_csv_filename = self.choose_filename_for_CPT_image_calibrations(save=False)
         from .merge_unmerge_csv import unmerge
-        tmp_f1, tmp_f2, tmp_f3, tmp_fgeneric = unmerge(input_csv_filename)
+        named_temporary_files = unmerge(input_csv_filename)
+        tmp_f1, tmp_f2, tmp_f3, tmp_fgeneric = named_temporary_files.values()
         # Read the generic calibration points layers
-        self._setup_calibration_layers(files_to_read_from = [tmp_f1, tmp_f2, tmp_f3])
+        self._setup_calibration_layers(files_to_read_from = [tmp_f1.name, tmp_f2.name, tmp_f3.name])
         # Read the per-event calibration layers:
-        layer_with_data_and_props = read_CPT_points_layer_from_csv(tmp_fgeneric)
+        layer_with_data_and_props = read_CPT_points_layer_from_csv(tmp_fgeneric.name)
+        #clean up:
+        for tmp in named_temporary_files.values():
+            tmp.close()
 
         self.event_calibration_layer().data = layer_with_data_and_props.data
         self.event_calibration_layer().properties = layer_with_data_and_props.properties
