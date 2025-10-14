@@ -392,7 +392,8 @@ class CalibrationManager:
             generic_calibration_layer.name)  # names are unique
         print(f"Clone thinks point has {view=} and {xy=}.")
 
-        pass # NOT YET IMPLEMENTED
+        self.parent.put_xy_and_view_into_table(xy, view, is_production_vertex=True)
+
 
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
         #print(f"About to clone generic fiducial {idx=} with {name=}")

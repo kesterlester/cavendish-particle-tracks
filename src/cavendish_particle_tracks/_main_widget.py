@@ -340,6 +340,19 @@ class ParticleTracksWidget(QWidget):
                 return False
         return True
 
+    def put_xy_and_view_into_table(self,
+                                    xy,
+                                    view,
+                                    is_production_vertex : bool, # False implies is_decay_vertex
+                                    ):
+        try:
+            selected_row = self._get_selected_row()
+        except IndexError:
+            napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
+        else:
+            napari.utils.notifications.show_info(f"Adding coords {xy} to row {selected_row} of table for view {view}.")
+
+
     def _on_click_radius(self) -> None:
         """When the 'Calculate radius' button is clicked, calculate the radius
         for the currently selected points and assign it to the currently selected table row.
@@ -366,7 +379,7 @@ class ParticleTracksWidget(QWidget):
         try:
             selected_row = self._get_selected_row()
         except IndexError:
-            napari.utils.notifications.show_error("There are no particles in the table.")
+            napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
         else:
             print(
                 f"Adding points to the table: {selected_points_xy}"
@@ -437,7 +450,7 @@ class ParticleTracksWidget(QWidget):
         try:
             selected_row = self._get_selected_row()
         except IndexError:
-            napari.utils.notifications.show_error("There are no particles in the table.")
+            napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
         else:
 
             print(f"Adding points to the table: {selected_points_xy}")
@@ -678,7 +691,7 @@ class ParticleTracksWidget(QWidget):
         try:
             selected_row = self._get_selected_row()
         except IndexError:
-            napari.utils.notifications.show_error("There are no particles in the table.")
+            napari.utils.notifications.show_error("The table of processes is empty so no process can be deleted.")
         else:
             confirmation_dialog = QMessageBox()
             confirmation_dialog.setText("Deleting selected particle")
