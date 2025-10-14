@@ -99,4 +99,8 @@ def unmerge(merged_path):
         f.flush()
         f.seek(0)
 
+    print("Ummerge is about to return dict having these items:")
+    for key, thing in temp_files.items():
+        print(f"{key=}, {thing=}")
+
     return temp_files

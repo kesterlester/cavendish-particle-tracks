@@ -177,7 +177,9 @@ class CalibrationManager:
 
 
     @staticmethod
-    def choose_filename_for_CPT_image_calibrations(default_name="CPT_image_calibrations.csv"):
+    def choose_filename_for_CPT_image_calibrations(save=True, # else load
+                                                   default_name="CPT_image_calibrations.csv",
+                                                    ):
         """
         Opens a 'Save As' dialog for CSV files and returns the selected path (str),
         or None if the user cancels.
@@ -185,9 +187,10 @@ class CalibrationManager:
         from qtpy.QtWidgets import QFileDialog
 
         # Filter ensures only .csv is shown/suggested
-        file_path, _ = QFileDialog.getSaveFileName(
+        method = QFileDialog.getSaveFileName if save else QFileDialog.getOpenFileName
+        file_path, _ = method(
             parent=None,
-            caption="Save CSV File As...",
+            caption="Save CSV File As ..." if save else "Open CSV File ...",
             directory=default_name,
             filter="CSV Files (*.csv);;All Files (*)"
         )
@@ -200,13 +203,22 @@ class CalibrationManager:
 
     def load_calibration(self):
 
-        files_to_read_from = [ self.filename_for_generic_calibration_layer(v) for v in view_indices ]
-        
-        # Read the generic calibration points layers
-        self._setup_calibration_layers(files_to_read_from = files_to_read_from )
 
+        # OLD DEAD RECKONING METHOD
+        ## Read the generic calibration points layers
+        # files_to_read_from = [self.filename_for_generic_calibration_layer(v) for v in view_indices]
+        # self._setup_calibration_layers(files_to_read_from = files_to_read_from )
+        ## Read the per-event calibration layers:
+        # layer_with_data_and_props = read_CPT_points_layer_from_csv(self.filename_for_event_calibration_layer())
+
+        # New adaptive method:
+        input_csv_filename = self.choose_filename_for_CPT_image_calibrations(save=False)
+        from .merge_unmerge_csv import unmerge
+        tmp_f1, tmp_f2, tmp_f3, tmp_fgeneric = unmerge(input_csv_filename)
+        # Read the generic calibration points layers
+        self._setup_calibration_layers(files_to_read_from = [tmp_f1, tmp_f2, tmp_f3])
         # Read the per-event calibration layers:
-        layer_with_data_and_props = read_CPT_points_layer_from_csv(self.filename_for_event_calibration_layer())
+        layer_with_data_and_props = read_CPT_points_layer_from_csv(tmp_fgeneric)
 
         self.event_calibration_layer().data = layer_with_data_and_props.data
         self.event_calibration_layer().properties = layer_with_data_and_props.properties
@@ -243,7 +255,7 @@ class CalibrationManager:
 
             from .merge_unmerge_csv import merge
 
-            output_csv_filename = self.choose_filename_for_CPT_image_calibrations()
+            output_csv_filename = self.choose_filename_for_CPT_image_calibrations(save=True)
 
             merge(f_view0, f_view1, f_view2, f_generic, output_csv_filename )
             #self.merge_calibration_files(f_views, f_generic, output_csv_file)
