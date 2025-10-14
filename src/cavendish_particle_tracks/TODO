@@ -4,6 +4,10 @@ Also the way _setup_calibration_layers is used in _calibration manager is really
 
 We would like to persistify points like start or decay vertices in the calibration file. However this would require creation of stable process IDs which do not currently exist.
 
+Should add ability to remove origin/ecay vertex from current process.
+
+Should make an origin and a decay vertex.
+
 The process table seems to have a visual part and an internal data part, and the two are kept in sync by duplicate insertions and removals. This seems fragile.  Much better owuld be to have one core representation and multiple views of it.
 
 Move most simple messages to the same format used after successful file save: napari.utils.notifications.show_info("Data saved to " + file_name)

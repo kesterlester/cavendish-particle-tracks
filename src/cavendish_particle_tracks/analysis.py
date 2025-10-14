@@ -93,13 +93,16 @@ TYPICAL_IMAGE_SHORT_SIZE_PIX = 2753 # This is just typical. No guarantee that an
 
 VIEW_NAMES = ["view1", "view2", "view3"]
 
-EXPECTED_PROCESSES = [
-    "New process",
-    "Σ⁺ ⇨ p + π⁰",
-    "Σ⁺ ⇨ n + π⁺",
-    "Σ⁻ ⇨ n + π⁻",
-    "Λ⁰ ⇨ p + π⁻",
-    "Λ⁰ ⇨ n + π⁰",
+EXPECTED_PROCESSES_NICE_TO_ASCII = {
+    "New process": "New process",
+    "Σ⁺ ⇨ p + π⁰": "Sigma+_to_p_pi0",
+    "Σ⁺ ⇨ n + π⁺": "Sigma+_to_n_pi+",
+    "Σ⁻ ⇨ n + π⁻": "Sigma-_to_p_pi-",
+    "Λ⁰ ⇨ p + π⁻": "Lambda0_to_p_pi-",
+    "Λ⁰ ⇨ n + π⁰": "Lambda0_to_m_pi0",
+}
+EXPECTED_PROCESSES_NICE = [
+    key for key in EXPECTED_PROCESSES_NICE_TO_ASCII
 ]
 
 
@@ -293,6 +296,14 @@ class ParticleDecay:
                     x, y = point
                     mystring += f"[{x} {y}]; "
                 mystring = mystring[0:-2] + "],"
+            elif var == "name":
+                nice_name = str(getattr(self, var))
+                if nice_name in EXPECTED_PROCESSES_NICE_TO_ASCII:
+                    ascii_name = EXPECTED_PROCESSES_NICE_TO_ASCII[nice_name]
+                    name_to_write = ascii_name
+                else:
+                    name_to_write = nice_name
+                mystring += name_to_write + ","
             else:
                 mystring += str(getattr(self, var)) + ","
         return mystring[0:-1] + "\n"

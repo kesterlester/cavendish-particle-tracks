@@ -36,7 +36,7 @@ from ._settings import get_bypass, get_shuffling_seed
 from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES, VIEW_NAMES, ParticleDecay
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay
 
 ENABLE_MAG = False
 
@@ -94,9 +94,9 @@ class ParticleTracksWidget(QWidget):
         # define QtWidgets
         self.load_button = QPushButton("Load data")
         self.particle_decays_menu = QComboBox()
-        self.particle_decays_menu.addItems(EXPECTED_PROCESSES)
+        self.particle_decays_menu.addItems(EXPECTED_PROCESSES_NICE)
         self.particle_decays_menu.setCurrentIndex(0)
-        self.particle_decays_menu.currentIndexChanged.connect(self._on_click_new_particle)
+        self.particle_decays_menu.currentIndexChanged.connect(self._on_click_new_process)
         self.radius_button = QPushButton("Calculate radius")
         self.delete_process = QPushButton("Delete process")
         self.length_button = QPushButton("Calculate length")
@@ -659,16 +659,18 @@ class ParticleTracksWidget(QWidget):
                 border_width_is_relative=False,
             )
 
-    def _on_click_new_particle(self) -> None:
+    def _on_click_new_process(self) -> None:
         """When the 'New process' button is clicked, append a new blank row to
         the table and select the first cell ready to receive the first point.
         """
-        if self.particle_decays_menu.currentIndex() < 1:
+        if self.particle_decays_menu.currentIndex() < 1: # Not the header!
             return
 
         # add a new particle to data
         new_particle = ParticleDecay()
-        new_particle.name = self.particle_decays_menu.currentText()
+        nice_name = self.particle_decays_menu.currentText()
+        # ascii_name = EXPECTED_PROCESSES_NICE_TO_ASCII[nice_name]
+        new_particle.name = nice_name
         new_particle.index = self.particle_decays_menu.currentIndex()
         new_particle.magnification_a = self.mag_a
         new_particle.magnification_b = self.mag_b
