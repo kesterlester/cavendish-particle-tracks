@@ -33,7 +33,7 @@ from ._calculate import length, radius
 from ._decay_angles_dialog import DecayAnglesDialog
 from ._image_calibration_dialog import ImageCalibrationDialog
 from ._settings import get_bypass, get_shuffling_seed
-from ._stereoshift_dialog import StereoshiftDialog
+#from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay
@@ -101,9 +101,9 @@ class ParticleTracksWidget(QWidget):
         self.delete_process = QPushButton("Delete process")
         self.length_button = QPushButton("Calculate length")
         self.decay_angles_button = QPushButton("Calculate decay angles")
-        self.stereoshift_button = QPushButton("Stereoshift")
+        # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
-        self.save_data_button = QPushButton("Save recorded processes")
+        self.save_data_button = QPushButton("Save table data")
 
         # setup particle table
         self.table = self._set_up_table()
@@ -121,7 +121,7 @@ class ParticleTracksWidget(QWidget):
         self.radius_button.clicked.connect(self._on_click_radius)
         self.length_button.clicked.connect(self._on_click_length)
         self.decay_angles_button.clicked.connect(self._on_click_decay_angles)
-        self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
+        #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
         self.apply_magnification_button.toggled.connect(
             self._on_click_apply_magnification
         )
@@ -141,7 +141,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.radius_button, 2, 0)
             self.buttonbox.addWidget(self.length_button, 2, 1)
             self.buttonbox.addWidget(self.decay_angles_button, 3, 0)
-            self.buttonbox.addWidget(self.stereoshift_button, 3, 1)
+            #self.buttonbox.addWidget(self.stereoshift_button, 3, 1)
             self.buttonbox.addWidget(self.image_calibration_button, 4, 0)
             self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
             self.buttonbox.addWidget(self.save_data_button, 5, 0)
@@ -161,7 +161,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.decay_angles_button)
             self.buttonbox.addWidget(self.table)
             self.buttonbox.addWidget(self.apply_magnification_button)
-            self.buttonbox.addWidget(self.stereoshift_button)
+            #self.buttonbox.addWidget(self.stereoshift_button)
             self.buttonbox.addWidget(self.image_calibration_button)
             self.buttonbox.addWidget(self.save_data_button)
             self.setLayout(self.buttonbox)
@@ -188,7 +188,7 @@ class ParticleTracksWidget(QWidget):
 
         # Dialog pointers to reuse
         self.mag_dlg: ImageCalibrationDialog | None = None
-        self.stereoshift_dlg: StereoshiftDialog | None = None
+        #self.stereoshift_dlg: StereoshiftDialog | None = None
         self.decay_angles_dlg: DecayAnglesDialog | None = None
 
         @self.viewer.layers.events.connect
@@ -285,7 +285,7 @@ class ParticleTracksWidget(QWidget):
             self.delete_process.setEnabled(True)
             ## think about these two + cal once done.
             self.image_calibration_button.setEnabled(True)
-            self.stereoshift_button.setEnabled(True)
+            #self.stereoshift_button.setEnabled(True)
             if self.data[selected_row].index < 4:
                 self.radius_button.setEnabled(True)
                 self.length_button.setEnabled(True)
@@ -302,7 +302,7 @@ class ParticleTracksWidget(QWidget):
             self.length_button.setEnabled(False)
             self.decay_angles_button.setEnabled(False)
             # self.apply_magnification_button.setEnabled(False)
-            self.stereoshift_button.setEnabled(False)
+            #self.stereoshift_button.setEnabled(False)
             # self.magnification_button.setEnabled(False)
             self.save_data_button.setEnabled(False)
 
@@ -320,7 +320,7 @@ class ParticleTracksWidget(QWidget):
             self.radius_button.setEnabled(False)
             self.length_button.setEnabled(False)
             self.decay_angles_button.setEnabled(False)
-            self.stereoshift_button.setEnabled(False)
+            #self.stereoshift_button.setEnabled(False)
             self.save_data_button.setEnabled(False)
             self.image_calibration_button.setEnabled(False)
             #if ENABLE_MAG:
@@ -520,17 +520,17 @@ class ParticleTracksWidget(QWidget):
         self.decay_angles_dlg.raise_()
         return self.decay_angles_dlg
 
-    def _on_click_stereoshift(self) -> StereoshiftDialog:
-        """When the 'Calculate stereoshift' button is clicked, open stereoshift dialog."""
-        # Different behaviour to the Magnification dialog, waiting for the definition of the stereoshift layer structure
-        if self.stereoshift_dlg is not None:
-            self.stereoshift_dlg.show()
-            self.stereoshift_dlg.raise_()
-            return self.stereoshift_dlg
-        self.stereoshift_dlg = StereoshiftDialog(self)
-        self.stereoshift_dlg.show()
-        self.stereoshift_dlg.raise_()
-        return self.stereoshift_dlg
+    # def _on_click_stereoshift(self) -> StereoshiftDialog:
+    #     """When the 'Calculate stereoshift' button is clicked, open stereoshift dialog."""
+    #     # Different behaviour to the Magnification dialog, waiting for the definition of the stereoshift layer structure
+    #     if self.stereoshift_dlg is not None:
+    #         self.stereoshift_dlg.show()
+    #         self.stereoshift_dlg.raise_()
+    #         return self.stereoshift_dlg
+    #     self.stereoshift_dlg = StereoshiftDialog(self)
+    #     self.stereoshift_dlg.show()
+    #     self.stereoshift_dlg.raise_()
+    #     return self.stereoshift_dlg
 
     def _on_click_load_data(self) -> None:
         """When the 'Load data' button is clicked, a dialog opens to select the folder containing the data.
