@@ -22,6 +22,10 @@ FIDUCIAL_BACK = {
     "A": [-15.00, 8.68],
 }  # cm
 
+VTX_NONE = "_"
+VTX_ORIGIN = "O"
+VTX_DECAY = "D"
+
 # These are approximate locations for an interesting point in event XXXX and three pairs of fiducials in each view.
 debug_points_view_0_calibration_layer = np.array([[1241.8771528 , 4458.80208973],
        [ 547.27520267, 5571.46964481],
@@ -201,6 +205,8 @@ class ParticleDecay:
     decay_v2_x: str = ""
     decay_v2_y: str = ""
 
+    saved_vertices: str = VTX_NONE + VTX_NONE + VTX_NONE + " " + VTX_NONE + VTX_NONE + VTX_NONE
+
     def vars_to_show(self, calibrated=False):
         return [
             "event_number",
@@ -212,6 +218,7 @@ class ParticleDecay:
             # "magnification",
             "phi_proton",
             "phi_pion",
+            "saved_vertices",
         ]
 
     def vars_to_save(self):

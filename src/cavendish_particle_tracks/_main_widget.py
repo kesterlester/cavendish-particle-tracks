@@ -36,7 +36,7 @@ from ._settings import get_bypass, get_shuffling_seed
 #from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, VTX_ORIGIN, VTX_DECAY, VTX_NONE
 
 ENABLE_MAG = False
 
@@ -383,8 +383,22 @@ class ParticleTracksWidget(QWidget):
                 # Next two lines break a numpy link. Just seems sensible to do.
                 x = float(x)
                 y = float(y)
+                marker_char = VTX_ORIGIN if is_origin_vertex else VTX_DECAY
             else:
                 x, y = "", ""
+                marker_char = VTX_NONE
+            marker_char_pos = view + (0 if is_origin_vertex else 4)
+
+            old_saved_vertices = self.data[selected_row].saved_vertices
+            # replace char of old_saved_vertices at index marker_char_pos with marker_char:
+            new_saved_vertices = old_saved_vertices[:marker_char_pos] + marker_char + old_saved_vertices[marker_char_pos+1:]
+
+            self.data[selected_row].saved_vertices = new_saved_vertices
+            self.table.setItem(
+                selected_row,
+                self._get_table_column_index("saved_vertices"),
+                QTableWidgetItem(str(self.data[selected_row].saved_vertices)),
+            )
 
             #print(f"put_xy_and_view_into_table will be using {x=} and {y=} when {xy=} as {delete=}")
 
@@ -740,6 +754,11 @@ class ParticleTracksWidget(QWidget):
             self.table.rowCount() - 1,
             self._get_table_column_index("event_number"),
             QTableWidgetItem(str(new_particle.event_number)),
+        )
+        self.table.setItem(
+            self.table.rowCount() - 1,
+            self._get_table_column_index("saved_vertices"),
+            QTableWidgetItem(str(new_particle.saved_vertices)),
         )
         #self.table.setItem(
         #    self.table.rowCount() - 1,
