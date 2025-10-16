@@ -155,6 +155,7 @@ class DecayAnglesDialog(QDialog):
             edge_color=colors,
             face_color=colors,
             text=text,
+            ndim=2, # v2.1.0 was crashing without this line. ChatGPT suggested that napari was (mis) auto-detecting that we wanted ndim=4 based on other things and so should explicityl set ndim=2 here. This seems to fix things.
         )
         return shapes_layer
 
