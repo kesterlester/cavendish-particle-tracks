@@ -61,3 +61,8 @@ If you encounter any problems, please [file an issue] along with a detailed desc
 [tox]: https://tox.readthedocs.io/en/latest/
 [pip]: https://pypi.org/project/pip/
 [PyPI]: https://pypi.org/
+
+## Releases
+
+v2.0.0 : First version by Lester.  Puts all magnification/calibration/depth control in the hands of the student as learning objective.
+v2.1.0 : Provides visual indication to user of which vertices are saved in the process table.
