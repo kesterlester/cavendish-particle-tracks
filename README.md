@@ -66,3 +66,5 @@ If you encounter any problems, please [file an issue] along with a detailed desc
 
 v2.0.0 : First version by Lester.  Puts all magnification/calibration/depth control in the hands of the student as learning objective.
 v2.1.0 : Provides visual indication to user of which vertices are saved in the process table.
+v2.1.1 : Bugfix to decay angles tool. (It could not create its own layer.)
+v2.1.2 : Better wording on dropdowns.

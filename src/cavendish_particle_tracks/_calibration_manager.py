@@ -101,14 +101,14 @@ class CalibrationManager:
     def dirty_things(self):
         calibrations_are_dirty = False
 
-        print("JJJJJJJJ", len(self.last_clean_state))
-        print("KKKKKKKK", len(self.state()))
+        #print("JJJJJJJJ", len(self.last_clean_state))
+        #print("KKKKKKKK", len(self.state()))
 
         for a, A in zip(self.last_clean_state, self.state()):
             data, meta, _ = a
             DATA, META, _ = A
-            print(f"MOOOOO {data=}")
-            print(f"MOOOOO {DATA=}")
+            #print(f"MOOOOO {data=}")
+            #print(f"MOOOOO {DATA=}")
             if (data != DATA).any():
                 calibrations_are_dirty = True
                 break
@@ -683,12 +683,12 @@ After event.type='mouse_release' event.button=2
 
                 if name=="origin" or name=="decay":
 
-                    clone_into_current_process_menu_item = QAction(f"Insert {name} coords into current process for THIS VIEW ONLY...", menu)
+                    clone_into_current_process_menu_item = QAction(f"Save (for THIS VIEW ONLY) coords of {name} vertex to current process in table...", menu)
                     clone_into_current_process_menu_item.triggered.connect(
                         lambda _: self.clone_only_this_point_view_into_table(i, name, layer))
                     menu.addAction(clone_into_current_process_menu_item)
 
-                    clone_into_current_process_menu_item = QAction(f"Insert {name} coords into current process for ALL VIEWS...",
+                    clone_into_current_process_menu_item = QAction(f"Save (for ALL VIEWS) coords of {name} vertex to current process in table...",
                                                              menu)
                     clone_into_current_process_menu_item.triggered.connect(
                         lambda _: self.clone_all_views_of_this_point_into_table(i, name))
@@ -697,13 +697,13 @@ After event.type='mouse_release' event.button=2
                     menu.addSeparator()
 
                     clone_into_current_process_menu_item = QAction(
-                        f"Delete {name} coords from current process for THIS VIEW ONLY...", menu)
+                        f"Delete (for THIS VIEW ONLY) coords of {name} vertex from current process in table...", menu)
                     clone_into_current_process_menu_item.triggered.connect(
                         lambda _: self.clone_only_this_point_view_into_table(i, name, layer, delete=True))
                     menu.addAction(clone_into_current_process_menu_item)
 
                     clone_into_current_process_menu_item = QAction(
-                        f"Delete {name} coords from current process for ALL VIEWS...",
+                        f"Delete (for ALL VIEWS) coords of {name} vertex from current process in table...",
                         menu)
                     clone_into_current_process_menu_item.triggered.connect(
                         lambda _: self.clone_all_views_of_this_point_into_table(i, name, delete=True))
