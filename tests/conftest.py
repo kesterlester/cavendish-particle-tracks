@@ -3,9 +3,17 @@ from collections.abc import Callable
 
 import pytest
 from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import QApplication, QDialog
+from qtpy.QtWidgets import QApplication, QDialog, QMessageBox
 
 from cavendish_particle_tracks._main_widget import ParticleTracksWidget
+
+
+@pytest.fixture(autouse=True)
+def auto_discard_unsaved_changes_popup(monkeypatch):
+    """Closing a test's fake napari window can trigger the plugin's real
+    'discard unsaved changes?' popup. Auto-answer it as Discard so tests
+    don't sit there waiting on a click that's never coming."""
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.Discard)
 
 
 @pytest.fixture

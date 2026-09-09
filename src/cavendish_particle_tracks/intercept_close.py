@@ -35,11 +35,11 @@ def InterceptClose(cls):
     """Class decorator to add close-interception behavior."""
 
     class Wrapped(cls):
-        def __init__(self, viewer, *args, **kwargs):
-            super().__init__(viewer, *args, **kwargs)
+        def __init__(self, napari_viewer, *args, **kwargs):
+            super().__init__(napari_viewer, *args, **kwargs)
             self._dirty = False
-            self._interceptor = _CloseInterceptor(viewer, self)
-            viewer.window._qt_window.installEventFilter(self._interceptor)
+            self._interceptor = _CloseInterceptor(napari_viewer, self)
+            napari_viewer.window._qt_window.installEventFilter(self._interceptor)
 
     # copy metadata so it looks like the original class
     functools.update_wrapper(Wrapped, cls, updated=())

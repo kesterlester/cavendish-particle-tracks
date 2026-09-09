@@ -165,6 +165,63 @@ class StereoshiftInfo:
         return mystring
 
 
+@dataclass
+class ViewData:
+    """Everything we've measured in one camera view for one process.
+
+    origin/decay are [x, y] pixel coordinates once someone has placed them,
+    None until then. track_points holds the points used for a radius fit
+    (up to 3). radius_px/length_px hold the derived results - go through
+    the setter methods below (rather than poking the fields directly) and
+    they'll stay in sync automatically as points are placed, moved, or
+    cleared.
+    """
+
+    origin: list[float] | None = None
+    decay: list[float] | None = None
+    track_points: list[list[float]] = field(default_factory=list)
+    radius_px: float | None = None
+    length_px: float | None = None
+
+    def set_origin(self, point: list[float] | None) -> None:
+        self.origin = point
+        self._recompute_length()
+
+    def set_decay(self, point: list[float] | None) -> None:
+        self.decay = point
+        self._recompute_length()
+
+    def add_track_point(self, point: list[float]) -> None:
+        self.track_points.append(point)
+        self._recompute_radius()
+
+    def clear_track_points(self) -> None:
+        self.track_points = []
+        self._recompute_radius()
+
+    def set_track_points(self, points: list[list[float]]) -> None:
+        self.track_points = points
+        self._recompute_radius()
+
+    def _recompute_length(self) -> None:
+        # imported here rather than at the top of the file - _calculate.py
+        # imports from analysis.py, so importing it up top would be circular
+        from ._calculate import length
+
+        if self.origin is not None and self.decay is not None:
+            self.length_px = length(self.origin, self.decay)
+        else:
+            self.length_px = None
+
+    def _recompute_radius(self) -> None:
+        from ._calculate import radius
+
+        if len(self.track_points) == 3:
+            self.radius_px = radius(*self.track_points)
+        else:
+            self.radius_px = None
+
+
 # Idea is to save a list of ParticleDecays as we go along, and then pandas.DataFrame(list_of_particles) does all the magic
 @dataclass
 class ParticleDecay:
@@ -172,6 +229,15 @@ class ParticleDecay:
     index: int = 0
     event_number: int = -1
     view_number: int = -1
+
+    # New home for per-view data (one entry per camera view). Nothing reads
+    # or writes this yet - the old fields below still do all the real work
+    # until we migrate _main_widget.py and _calibration_manager.py over to
+    # this in the following steps.
+    views: list[ViewData] = field(
+        default_factory=lambda: [ViewData(), ViewData(), ViewData()]
+    )
+
     _r1: list[float] = field(default_factory=lambda: [0.0, 0.0])
     _r2: list[float] = field(default_factory=lambda: [0.0, 0.0])
     _r3: list[float] = field(default_factory=lambda: [0.0, 0.0])
