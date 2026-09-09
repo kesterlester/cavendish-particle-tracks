@@ -698,6 +698,9 @@ class ParticleTracksWidget(QWidget):
         # Disable the load button after loading the data (interim solution until we can move to bottom-docked UI)
         self.load_button.setEnabled(False)
 
+        # Now that the image and its layers have fully settled, safe to make the calibration cursors visible
+        self.calibration_manager.set_calibration_layer_visibility_and_focus(True, False)
+
     def _setup_measurement_layer(self):
         """Create a Points layer for the measurement of the radii and lengths."""
 

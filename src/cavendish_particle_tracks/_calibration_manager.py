@@ -84,8 +84,9 @@ class CalibrationManager:
         # TODO: Try to avoid re-storing this redundant list of generic calibration layers .... should to live only in viewer?
         self._generic_calibration_layers = self._setup_calibration_layers()  # Returns a list of napari point layers.
 
-        # Make sure we are only shown when commanded!
-        # We can only do this once we can call self.generic_calibration_layers()
+        # Calibration layers start hidden - nothing to look at before an image is loaded. _load_data_from() in
+        # _main_widget.py switches them on once loading has actually finished, to avoid a napari timing issue
+        # where flipping visibility mid-image-load crashes the renderer.
         assert hasattr(self, "_generic_calibration_layers")
         self.set_calibration_layer_visibility_and_focus(False, False)
 

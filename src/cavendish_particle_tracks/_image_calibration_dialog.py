@@ -206,11 +206,7 @@ class ImageCalibrationDialog(NonOverlappingQDialog):  # was QDialog
     #     napari.utils.notifications.show_info("Magnification parameters updated.")
     #     return super().accept()
 
-
-    def show(self) -> None:
-        self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(True, True)
-        return super().show()
-
-    def reject(self) -> None:
-        self.parent.calibration_manager.set_calibration_layer_visibility_and_focus(False, False)
-        return super().reject()
+    # show()/reject() used to flip calibration-layer visibility on and off
+    # here - opening this dialog used to be the only way to see the
+    # calibration points. Visible all the time now (see
+    # CalibrationManager.__init__), so nothing left to toggle here.
