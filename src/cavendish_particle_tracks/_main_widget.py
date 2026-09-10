@@ -29,11 +29,10 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from ._calculate import length, radius
 from ._decay_angles_dialog import DecayAnglesDialog
 from ._image_calibration_dialog import ImageCalibrationDialog
 from ._settings import get_bypass, get_shuffling_seed
-#from ._stereoshift_dialog import StereoshiftDialog
+# from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, VTX_ORIGIN, VTX_DECAY, VTX_NONE
@@ -102,9 +101,7 @@ class ParticleTracksWidget(QWidget):
         self.particle_decays_menu.addItems(EXPECTED_PROCESSES_NICE)
         self.particle_decays_menu.setCurrentIndex(0)
         self.particle_decays_menu.currentIndexChanged.connect(self._on_click_new_process)
-        self.radius_button = QPushButton("Calculate radius")
         self.delete_process = QPushButton("Delete process")
-        self.length_button = QPushButton("Calculate length")
         self.decay_angles_button = QPushButton("Calculate decay angles")
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
@@ -123,8 +120,6 @@ class ParticleTracksWidget(QWidget):
         # connect callbacks
         self.load_button.clicked.connect(self._on_click_load_data)
         self.delete_process.clicked.connect(self._on_click_delete_process)
-        self.radius_button.clicked.connect(self._on_click_radius)
-        self.length_button.clicked.connect(self._on_click_length)
         self.decay_angles_button.clicked.connect(self._on_click_decay_angles)
         #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
         #self.apply_magnification_button.toggled.connect(
@@ -143,10 +138,8 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.load_button, 0, 0)
             self.buttonbox.addWidget(self.particle_decays_menu, 1, 0)
             self.buttonbox.addWidget(self.delete_process, 1, 1)
-            self.buttonbox.addWidget(self.radius_button, 2, 0)
-            self.buttonbox.addWidget(self.length_button, 2, 1)
-            self.buttonbox.addWidget(self.decay_angles_button, 3, 0)
-            self.buttonbox.addWidget(self.save_data_button, 3, 1)
+            self.buttonbox.addWidget(self.decay_angles_button, 2, 0)
+            self.buttonbox.addWidget(self.save_data_button, 2, 1)
             #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
             #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
@@ -162,8 +155,6 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.load_button)
             self.buttonbox.addWidget(self.particle_decays_menu)
             self.buttonbox.addWidget(self.delete_process)
-            self.buttonbox.addWidget(self.radius_button)
-            self.buttonbox.addWidget(self.length_button)
             self.buttonbox.addWidget(self.decay_angles_button)
             self.buttonbox.addWidget(self.table)
             #self.buttonbox.addWidget(self.apply_magnification_button)
@@ -306,19 +297,13 @@ class ParticleTracksWidget(QWidget):
             self.image_calibration_button.setEnabled(True)
             #self.stereoshift_button.setEnabled(True)
             if self.data[selected_row].index < 4:
-                self.radius_button.setEnabled(True)
-                self.length_button.setEnabled(True)
                 self.decay_angles_button.setEnabled(False)
                 return
             elif self.data[selected_row].index == 4:
-                self.radius_button.setEnabled(False)
-                self.length_button.setEnabled(True)
                 self.decay_angles_button.setEnabled(True)
                 return
         except IndexError:
             self.delete_process.setEnabled(False)
-            self.radius_button.setEnabled(False)
-            self.length_button.setEnabled(False)
             self.decay_angles_button.setEnabled(False)
             # self.apply_magnification_button.setEnabled(False)
             #self.stereoshift_button.setEnabled(False)
@@ -336,8 +321,6 @@ class ParticleTracksWidget(QWidget):
             self.load_button.setEnabled(True)
             self.particle_decays_menu.setEnabled(False)
             self.delete_process.setEnabled(False)
-            self.radius_button.setEnabled(False)
-            self.length_button.setEnabled(False)
             self.decay_angles_button.setEnabled(False)
             #self.stereoshift_button.setEnabled(False)
             self.save_data_button.setEnabled(False)
@@ -423,139 +406,8 @@ class ParticleTracksWidget(QWidget):
                     self.data[selected_row].decay_v2_x = x
                     self.data[selected_row].decay_v2_y = y
 
-    def _on_click_radius(self) -> None:
-        """When the 'Calculate radius' button is clicked, calculate the radius
-        for the currently selected points and assign it to the currently selected table row.
-        """
-
-        selected_points = self._get_selected_points()
-
-        # Forcing only 3 points
-        if len(selected_points) == 0:
-            napari.utils.notifications.show_error("You have not selected any points.")
-            return
-
-        if len(selected_points) != 3:
-            napari.utils.notifications.show_error(
-                "Select three points to calculate the path radius."
-            )
-            return
-
-        if not self._selected_points_are_on_current_slice(selected_points):
-            return
-
-        selected_points_xy = [point[2:] for point in selected_points]
-
-        try:
-            selected_row = self._get_selected_row()
-        except IndexError:
-            napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
-            return
-        else:
-            print(
-                f"Adding points to the table: {selected_points_xy}"
-            )  # FIXME: update when PR #164 is updated
-
-            # Assigns the points and radius to the selected row
-            self.data[selected_row].rpoints = selected_points_xy
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("rpoints"),
-                QTableWidgetItem(str(self.data[selected_row].rpoints)),
-            )
-
-            print("calculating radius!")
-            self.data[selected_row].radius_px = radius(*selected_points_xy)
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("radius_px"),
-                QTableWidgetItem(str(self.data[selected_row].radius_px)),
-            )
-
-            ## Add the calibrated radius to the table
-            #self.data[selected_row].radius_cm = (
-            #    self.data[selected_row].magnification * self.data[selected_row].radius_px
-            #)
-            #self.table.setItem(
-            #    selected_row,
-            #    self._get_table_column_index("radius_cm"),
-            #    QTableWidgetItem(str(self.data[selected_row].radius_cm)),
-            #)
-
-            napari.utils.notifications.show_info(
-                "Radius added to particle " + str(selected_row)
-            )
-            print(self.data[selected_row])
-
-
-
-    def _on_click_length(self) -> None:
-        """When the 'Calculate length' button is clicked, calculate the decay length
-        for the currently selected table row.
-        """
-
-        selected_points = self._get_selected_points()
-
-        # Force selection of 2 points
-        if len(selected_points) == 0:
-            napari.utils.notifications.show_error("You have not selected any points.")
-            return
-        elif len(selected_points) != 2:
-            napari.utils.notifications.show_error(
-                "Select two points to calculate the decay length."
-            )
-            return
-        else:
-
-            if not self._selected_points_are_on_current_slice(selected_points):
-                return
-
-            selected_points_xy = [point[2:] for point in selected_points]
-
-        # Forcing only 2 points
-        if len(selected_points) != 2:
-            print("Select (only) two points to calculate the decay length.")
-            return
-
-        # Assigns the points and radius to the selected row
-        try:
-            selected_row = self._get_selected_row()
-        except IndexError:
-            napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
-            return
-        else:
-
-            print(f"Adding points to the table: {selected_points_xy}")
-            self.data[selected_row].dpoints = selected_points_xy
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("dpoints"),
-                QTableWidgetItem(str(self.data[selected_row].dpoints)),
-            )
-
-            print("calculating decay length!")
-            self.data[selected_row].decay_length_px = length(*selected_points)
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("decay_length_px"),
-                QTableWidgetItem(str(self.data[selected_row].decay_length_px)),
-            )
-
-            ## Add the calibrated decay length to the table
-            #self.data[selected_row].decay_length_cm = (
-            #    self.data[selected_row].magnification
-            #    * self.data[selected_row].decay_length_px
-            #)
-            #self.table.setItem(
-            #    selected_row,
-            #    self._get_table_column_index("decay_length_cm"),
-            #    QTableWidgetItem(str(self.data[selected_row].decay_length_cm)),
-            #)
-
-            napari.utils.notifications.show_info(
-                "Decay length added to particle " + str(selected_row)
-            )
-            print(self.data[selected_row])
+    # _on_click_radius() and _on_click_length() used to live here - now removed that selecting
+    # points auto-calculates both live (see _on_measurement_points_changed in _setup_measurement_layer).
 
     def _on_click_decay_angles(self) -> DecayAnglesDialog:
         """When the 'Calculate decay angles' buttong is clicked, open the decay angles dialog"""

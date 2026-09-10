@@ -123,5 +123,7 @@ def track_parameters(line):
 def angle(line1: np.array, line2: np.array) -> float:
     v1, v2 = np.diff(line1, axis=0)[0], np.diff(line2, axis=0)[0]
     costheta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
-    sintheta = np.cross(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+    # 2D cross product, written out by hand rather than via np.cross which newer numpy no longer
+    # supports (used to just treat 2d vectors as 3D with z=0 and hand back the z-component)
+    sintheta = (v1[0] * v2[1] - v1[1] * v2[0]) / (np.linalg.norm(v1) * np.linalg.norm(v2))
     return np.arctan2(sintheta, costheta)
