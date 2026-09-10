@@ -197,6 +197,7 @@ class ParticleTracksWidget(QWidget):
             self._load_data_from(data_folder)
 
         self.calibration_manager = CalibrationManager(self, self.viewer)
+        self.viewer.dims.events.current_step.connect(self._sync_measurement_layer_to_selected_process)
 
     @property
     def camera_center(self):
@@ -279,8 +280,76 @@ class ParticleTracksWidget(QWidget):
         return -1
 
     def _on_row_selection_changed(self) -> None:
-        """Enable/disable calculation buttons depending on the row selection"""
+        """Enable/disable calculation buttons depending on the row selection, and jump the
+        viewer to the selected process's event and refresh the canvas cursors to match.
+        """
         self.set_button_availability()
+
+        try:
+            selected_row = self._get_selected_row()
+        except IndexError:
+            return
+
+        event_number = self.data[selected_row].event_number
+        if event_number >= 0:  # -1 means "never actually set", e.g. no data loaded yet
+            self.viewer.dims.set_current_step(1, event_number)
+
+        self._sync_measurement_layer_to_selected_process()
+
+    def _sync_measurement_layer_to_selected_process(self, event=None) -> None:
+        """Make the on-canvas origin/decay/track points reflect whichever
+        process is selected in the table, for the view+event currently on
+        screen. Runs on row selection and on every View/Event slider move -
+        both need the canvas to catch up with what that specific
+        (row, view, event) combination has actually saved, rather than
+        just showing whatever points happen to still be sitting there from
+        before. Points belonging to any other view/event slice are left
+        completely untouched.
+        """
+        if MEASUREMENTS_LAYER_NAME not in self.viewer.layers:
+            return
+
+        current_view = self.viewer.dims.current_step[0]
+        current_event = self.viewer.dims.current_step[1]
+
+        try:
+            selected_row = self._get_selected_row()
+        except IndexError:
+            selected_row = None
+
+        # A process only ever belongs to the one event it was created in. If the Event slider has
+        # moved away from that event - most likely by dragging the bar directly rather than
+        # clicking a different process row - selection no longer matches what's on screen. Deselect
+        # process, rather than displaying (or worse, writing into) a process's points on a photo
+        # it doesn't actually belong to.
+        if selected_row is not None:
+            process_event = self.data[selected_row].event_number
+            if process_event >= 0 and process_event != current_event:
+                self.table.clearSelection()
+                return  # clearing selection re-triggers this method itself
+
+        existing_data = self.layer_measurements.data
+        other_slices = [
+            point
+            for point in existing_data
+            if not (point[0] == current_view and point[1] == current_event)
+        ]
+
+        new_points = []
+        if selected_row is not None:
+            view_data = self.data[selected_row].views[current_view]
+            for point in (view_data.origin, view_data.decay, *view_data.track_points):
+                if point is not None:
+                    new_points.append([current_view, current_event, point[0], point[1]])
+
+        # Clear selection before AND after reassigning .data - before, so the
+        # data-change event this triggers doesn't fire the live-recalculation
+        # callback (_on_measurement_points_changed) using stale, now-invalid
+        # selection indices; after, in case napari leaves selection in some
+        # unexpected state once the array's been fully replaced.
+        self.layer_measurements.selected_data = set()
+        self.layer_measurements.data = other_slices + new_points
+        self.layer_measurements.selected_data = set()
 
     def set_button_availability(self) -> None:
         images_imported = False
