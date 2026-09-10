@@ -707,12 +707,58 @@ class ParticleTracksWidget(QWidget):
         if MEASUREMENTS_LAYER_NAME in self.viewer.layers:
             return self.viewer.layers[MEASUREMENTS_LAYER_NAME]
         else:
-            return self.viewer.add_points(
+            layer = self.viewer.add_points(
                 name=MEASUREMENTS_LAYER_NAME,
                 ndim=4,
                 size=20,
                 border_width=7,
                 border_width_is_relative=False,
+            )
+            layer.events.data.connect(self._on_measurement_points_changed)
+            layer.events.highlight.connect(self._on_measurement_points_changed)
+            return layer
+
+    def _on_measurement_points_changed(self, event=None) -> None:
+        """Live auto-calculation - fires whenever a point on the measurement
+        layer is placed, dragged, or removed, instead of waiting for a
+        button click. Two selected points are treated as an origin/decay
+        pair and feed the length calculation; three are treated as a radius
+        fit. Any other count just does nothing until the selection makes
+        sense - runs on every drag, so unlike the old button handlers
+        it needs to stay quiet rather than pop up error messages.
+        """
+        try:
+            selected_row = self._get_selected_row()
+        except IndexError:
+            return
+
+        selected_points = self._get_selected_points()
+        if len(selected_points) == 0:
+            return
+
+        for slice_index in (0, 1):  # View, Event
+            current_slice = self.viewer.dims.current_step[slice_index]
+            if not all(current_slice == point[slice_index] for point in selected_points):
+                return
+
+        selected_points_xy = [point[2:] for point in selected_points]
+        current_view = self.viewer.dims.current_step[0]
+        view_data = self.data[selected_row].views[current_view]
+
+        if len(selected_points_xy) == 2:
+            view_data.set_origin(list(selected_points_xy[0]))
+            view_data.set_decay(list(selected_points_xy[1]))
+            self.table.setItem(
+                selected_row,
+                self._get_table_column_index("decay_length_px"),
+                QTableWidgetItem(str(view_data.length_px)),
+            )
+        elif len(selected_points_xy) == 3:
+            view_data.set_track_points([list(p) for p in selected_points_xy])
+            self.table.setItem(
+                selected_row,
+                self._get_table_column_index("radius_px"),
+                QTableWidgetItem(str(view_data.radius_px)),
             )
 
     def _on_click_new_process(self) -> None:
