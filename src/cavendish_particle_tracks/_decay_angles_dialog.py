@@ -69,6 +69,7 @@ class DecayAnglesDialog(QDialog):
         self.join_coordinates = [200, 300]
         self.cal_layer: Shapes = self._setup_decayangles_layer()
         self.cal_layer.events.data.connect(self._enforce_points_coincident)
+        self.cal_layer.events.data.connect(self._on_shapes_changed)
 
         ### Define decay Angles related parameters used to store the results
         self.phi_proton = 0.0
@@ -159,8 +160,18 @@ class DecayAnglesDialog(QDialog):
         )
         return shapes_layer
 
+    def _on_shapes_changed(self, event: Event = None) -> None:
+        """Recalculate the opening angles live whenever a track line is dragged, instead of waiting for
+        Calculate button. Shares the same events.data signal as _enforce_points_coincident above, so
+        this also re-fires (harmlessly) right after that method corrects a vertex - the second, corrected
+        calculation is the one that actually reaches the screen.
+        """
+        if event is None or event.action != "changed":
+            return
+        self._on_click_calculate()
+
     def _on_click_calculate(self) -> None:
-        """When 'Calculate' button is clicked, calculate opening angles and populate table"""
+        """Calculate opening angles and populate dialog's text boxes."""
 
         # The Lambda travels towards the decay vertex, line needs to be reversed
         lambda_line = self.cal_layer.data[0][::-1]
