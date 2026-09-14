@@ -280,31 +280,114 @@ class ParticleTracksWidget(QWidget):
         return -1
 
     def _on_row_selection_changed(self) -> None:
-        """Enable/disable calculation buttons depending on the row selection, and jump the
-        viewer to the selected process's event and refresh the canvas cursors to match.
+        """Enable/disable calculation buttons depending on the row selection, jump the
+        viewer to the selected process's event, and refresh the canvas cursors to match.
+        The canvas refresh must always run, even when nothing is selected - that's how
+        the canvas gets correctly cleared when a process is deselected (e.g. by the
+        dims-mismatch guard in _sync_measurement_layer_to_selected_process), so it can't be
+        skipped early just because there's no event to jump to.
         """
         self.set_button_availability()
 
         try:
             selected_row = self._get_selected_row()
         except IndexError:
-            return
+            selected_row = None
 
-        event_number = self.data[selected_row].event_number
-        if event_number >= 0:  # -1 means "never actually set", e.g. no data loaded yet
-            self.viewer.dims.set_current_step(1, event_number)
+        if selected_row is not None:
+            event_number = self.data[selected_row].event_number
+            if event_number >= 0:  # -1 means "never actually set"
+                self.viewer.dims.set_current_step(1, event_number)
 
         self._sync_measurement_layer_to_selected_process()
 
+    def _restyle_measurement_points(self) -> None:
+        """Ring-highlight each point on the measurement layer to show what it currently contributes:
+        a length pair (origin/decay), a radius fit (three track points), both at once (rare), or
+        neither (a stray leftover / unowned point, left at the default
+        style). The dot's white fill never changes - only the border.
+        """
+        if MEASUREMENTS_LAYER_NAME not in self.viewer.layers:
+            return
+
+        data = self.layer_measurements.data
+        if len(data) == 0:
+            return
+
+        DEFAULT_BORDER_COLOR = "dimgrey"
+        DEFAULT_BORDER_WIDTH = 7
+        LENGTH_COLOR = "cornflowerblue"
+        RADIUS_COLOR = "mediumorchid"
+        BOTH_COLOR = "slateblue"
+
+        length_points = []
+        radius_points = []
+        try:
+            selected_row = self._get_selected_row()
+        except IndexError:
+            selected_row = None
+
+        if selected_row is not None:
+            current_view = self.viewer.dims.current_step[0]
+            current_event = self.viewer.dims.current_step[1]
+            if self.data[selected_row].event_number == current_event:
+                view_data = self.data[selected_row].views[current_view]
+                if view_data.origin is not None:
+                    length_points.append((current_view, current_event, *view_data.origin))
+                if view_data.decay is not None:
+                    length_points.append((current_view, current_event, *view_data.decay))
+                for point in view_data.track_points:
+                    radius_points.append((current_view, current_event, *point))
+
+        def matches(point, candidates):
+            return any(
+                point[0] == c[0]
+                and point[1] == c[1]
+                and np.isclose(point[2], c[2])
+                and np.isclose(point[3], c[3])
+                for c in candidates
+            )
+
+        border_colors = []
+        for point in data:
+            is_length = matches(point, length_points)
+            is_radius = matches(point, radius_points)
+            if is_length and is_radius:
+                border_colors.append(BOTH_COLOR)
+            elif is_length:
+                border_colors.append(LENGTH_COLOR)
+            elif is_radius:
+                border_colors.append(RADIUS_COLOR)
+            else:
+                border_colors.append(DEFAULT_BORDER_COLOR)
+
+        # Guard against the highlight-refresh feedback loop below, and reset the "next new point"
+        # default back to plain grey - napari otherwise keeps whatever style we last painted onto the
+        # currently-selected points and quietly applies it to the very next brand-new point too.
+        self._restyling = True
+        try:
+            self.layer_measurements.border_color = border_colors
+            self.layer_measurements.border_width = [DEFAULT_BORDER_WIDTH] * len(data)
+            self.layer_measurements.current_border_color = DEFAULT_BORDER_COLOR
+            self.layer_measurements.current_border_width = DEFAULT_BORDER_WIDTH
+            # Force the repaint explicitly, rather than relying on one of the assignments above
+            # to trigger it as a side effect - with border_width now staying at a single uniform
+            # value, napari may treat that particular assignment as a no-op and skip its own
+            # repaint, leaving the (correct) colour applied in data but not actually drawn until
+            # something else forces a real re-slice (e.g. navigating to a different event and back).
+            self.layer_measurements.refresh()
+        finally:
+            self._restyling = False
+
     def _sync_measurement_layer_to_selected_process(self, event=None) -> None:
-        """Make the on-canvas origin/decay/track points reflect whichever
-        process is selected in the table, for the view+event currently on
-        screen. Runs on row selection and on every View/Event slider move -
-        both need the canvas to catch up with what that specific
-        (row, view, event) combination has actually saved, rather than
-        just showing whatever points happen to still be sitting there from
-        before. Points belonging to any other view/event slice are left
-        completely untouched.
+        """Make the on-canvas origin/decay/track points reflect whichever process is selected in
+        the table, for the view+event currently on screen, and refresh the table's radius/length
+        cells to match. Runs on row selection and on every View/Event slider move.
+
+        With a process selected, rebuilds the current slice from its saved data. With nothing
+        selected, clears the current slice instead of leaving old points sitting there - safe to do
+        now that _on_measurement_points_changed bails out immediately whenever nothing's selected,
+        so this can no longer be misread as a real deletion the way it once could.
         """
         if MEASUREMENTS_LAYER_NAME not in self.viewer.layers:
             return
@@ -336,20 +419,39 @@ class ParticleTracksWidget(QWidget):
         ]
 
         new_points = []
+        view_data = None
         if selected_row is not None:
             view_data = self.data[selected_row].views[current_view]
             for point in (view_data.origin, view_data.decay, *view_data.track_points):
                 if point is not None:
                     new_points.append([current_view, current_event, point[0], point[1]])
 
-        # Clear selection before AND after reassigning .data - before, so the
-        # data-change event this triggers doesn't fire the live-recalculation
-        # callback (_on_measurement_points_changed) using stale, now-invalid
-        # selection indices; after, in case napari leaves selection in some
-        # unexpected state once the array's been fully replaced.
-        self.layer_measurements.selected_data = set()
-        self.layer_measurements.data = other_slices + new_points
-        self.layer_measurements.selected_data = set()
+        # Rewriting .data here is our own routine canvas rebuild, not a
+        # real user action - guard it so _on_measurement_points_changed
+        # doesn't treat this rebuild as evidence that points were
+        # deleted (that reconciliation logic must only ever react to
+        # something the user actually did to the canvas).
+        self._syncing = True
+        try:
+            self.layer_measurements.selected_data = set()
+            self.layer_measurements.data = other_slices + new_points
+            self.layer_measurements.selected_data = set()
+        finally:
+            self._syncing = False
+
+        if selected_row is not None:
+            self.table.setItem(
+                selected_row,
+                self._get_table_column_index("decay_length_px"),
+                QTableWidgetItem(str(view_data.length_px)),
+            )
+            self.table.setItem(
+                selected_row,
+                self._get_table_column_index("radius_px"),
+                QTableWidgetItem(str(view_data.radius_px)),
+            )
+
+        self._restyle_measurement_points()
 
     def set_button_availability(self) -> None:
         images_imported = False
@@ -640,47 +742,81 @@ class ParticleTracksWidget(QWidget):
             return layer
 
     def _on_measurement_points_changed(self, event=None) -> None:
-        """Live auto-calculation - fires whenever a point on the measurement
-        layer is placed, dragged, or removed, instead of waiting for a
-        button click. Two selected points are treated as an origin/decay
-        pair and feed the length calculation; three are treated as a radius
-        fit. Any other count just does nothing until the selection makes
-        sense - runs on every drag, so unlike the old button handlers
-        it needs to stay quiet rather than pop up error messages.
+        """Live auto-calculation and cleanup - fires whenever a point on the measurement
+        layer is placed, dragged, removed, or (re)selected.
+
+        First, reconciles deletions: if a point that used to be part of this view's saved
+        origin/decay/track data is no longer on the canvas (e.g. selected and deleted with
+        the 'x' tool), clears it from the stored data too.
+
+        Then, if exactly 2 or 3 points are currently selected (and all on the current View/Event
+        slice), treats them as a fresh origin/decay pair or radius fit and saves that instead.
         """
+        if getattr(self, "_restyling", False) or getattr(self, "_syncing", False):
+            return  # re-entered because our own restyle/sync triggered this event - stop here
+
         try:
             selected_row = self._get_selected_row()
         except IndexError:
             return
 
-        selected_points = self._get_selected_points()
-        if len(selected_points) == 0:
+        current_view = self.viewer.dims.current_step[0]
+        current_event = self.viewer.dims.current_step[1]
+
+        # If the viewer has already wandered to a different event than the one this process
+        # actually belongs to - e.g. mid-drag of the Event slider, before the row has actually
+        # been deselected - nothing below is meaningful: napari's own slice-change handling
+        # can prune point selection and fire a highlight event right at this moment, and comparing
+        # the process's real (correctly untouched) points against this wrong event's canvas slice
+        # would misread "not on this slice" as "deleted". Bail out rather than trust it.
+        if self.data[selected_row].event_number != current_event:
             return
 
-        for slice_index in (0, 1):  # View, Event
-            current_slice = self.viewer.dims.current_step[slice_index]
-            if not all(current_slice == point[slice_index] for point in selected_points):
-                return
-
-        selected_points_xy = [point[2:] for point in selected_points]
-        current_view = self.viewer.dims.current_step[0]
         view_data = self.data[selected_row].views[current_view]
 
-        if len(selected_points_xy) == 2:
-            view_data.set_origin(list(selected_points_xy[0]))
-            view_data.set_decay(list(selected_points_xy[1]))
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("decay_length_px"),
-                QTableWidgetItem(str(view_data.length_px)),
+        def as_xy(point):
+            return (round(float(point[0]), 6), round(float(point[1]), 6))
+
+        current_xy_on_canvas = {
+            as_xy(p[2:])
+            for p in self.layer_measurements.data
+            if p[0] == current_view and p[1] == current_event
+        }
+
+        if view_data.origin is not None and as_xy(view_data.origin) not in current_xy_on_canvas:
+            view_data.set_origin(None)
+        if view_data.decay is not None and as_xy(view_data.decay) not in current_xy_on_canvas:
+            view_data.set_decay(None)
+        remaining_track_points = [p for p in view_data.track_points if as_xy(p) in current_xy_on_canvas]
+        if len(remaining_track_points) != len(view_data.track_points):
+            view_data.set_track_points(remaining_track_points)
+
+        selected_points = self._get_selected_points()
+        if len(selected_points) in (2, 3):
+            on_current_slice = all(
+                self.viewer.dims.current_step[i] == point[i]
+                for point in selected_points
+                for i in (0, 1)
             )
-        elif len(selected_points_xy) == 3:
-            view_data.set_track_points([list(p) for p in selected_points_xy])
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("radius_px"),
-                QTableWidgetItem(str(view_data.radius_px)),
-            )
+            if on_current_slice:
+                selected_points_xy = [point[2:] for point in selected_points]
+                if len(selected_points_xy) == 2:
+                    view_data.set_origin(list(selected_points_xy[0]))
+                    view_data.set_decay(list(selected_points_xy[1]))
+                else:
+                    view_data.set_track_points([list(p) for p in selected_points_xy])
+
+        self.table.setItem(
+            selected_row,
+            self._get_table_column_index("decay_length_px"),
+            QTableWidgetItem(str(view_data.length_px)),
+        )
+        self.table.setItem(
+            selected_row,
+            self._get_table_column_index("radius_px"),
+            QTableWidgetItem(str(view_data.radius_px)),
+        )
+        self._restyle_measurement_points()
 
     def _on_click_new_process(self) -> None:
         """When the 'New process' button is clicked, append a new blank row to
