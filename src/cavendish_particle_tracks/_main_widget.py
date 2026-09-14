@@ -16,6 +16,7 @@ import numpy as np
 from dask_image.imread import imread
 from qtpy.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QGridLayout,
@@ -103,6 +104,10 @@ class ParticleTracksWidget(QWidget):
         self.particle_decays_menu.currentIndexChanged.connect(self._on_click_new_process)
         self.delete_process = QPushButton("Delete process")
         self.decay_angles_button = QPushButton("Calculate decay angles")
+        self.show_track_vertices_checkbox = QCheckBox("Show radius points")
+        self.show_track_vertices_checkbox.setChecked(True)
+        self.show_origin_decay_checkbox = QCheckBox("Show length points")
+        self.show_origin_decay_checkbox.setChecked(True)
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
         self.save_data_button = QPushButton("Save process table")
@@ -121,6 +126,8 @@ class ParticleTracksWidget(QWidget):
         self.load_button.clicked.connect(self._on_click_load_data)
         self.delete_process.clicked.connect(self._on_click_delete_process)
         self.decay_angles_button.clicked.connect(self._on_click_decay_angles)
+        self.show_track_vertices_checkbox.stateChanged.connect(lambda _: self._restyle_measurement_points())
+        self.show_origin_decay_checkbox.stateChanged.connect(lambda _: self._restyle_measurement_points())
         #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
         #self.apply_magnification_button.toggled.connect(
         #    self._on_click_apply_magnification
@@ -140,6 +147,8 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.delete_process, 1, 1)
             self.buttonbox.addWidget(self.decay_angles_button, 2, 0)
             self.buttonbox.addWidget(self.save_data_button, 2, 1)
+            self.buttonbox.addWidget(self.show_track_vertices_checkbox, 3, 0)
+            self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
             #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
             #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
@@ -156,6 +165,8 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.particle_decays_menu)
             self.buttonbox.addWidget(self.delete_process)
             self.buttonbox.addWidget(self.decay_angles_button)
+            self.buttonbox.addWidget(self.show_track_vertices_checkbox)
+            self.buttonbox.addWidget(self.show_origin_decay_checkbox)
             self.buttonbox.addWidget(self.table)
             #self.buttonbox.addWidget(self.apply_magnification_button)
             #self.buttonbox.addWidget(self.stereoshift_button)
@@ -196,6 +207,7 @@ class ParticleTracksWidget(QWidget):
         if data_folder is not None:
             self._load_data_from(data_folder)
 
+        self._last_synced_dims = None
         self.calibration_manager = CalibrationManager(self, self.viewer)
         self.viewer.dims.events.current_step.connect(self._sync_measurement_layer_to_selected_process)
 
@@ -348,7 +360,13 @@ class ParticleTracksWidget(QWidget):
                 for c in candidates
             )
 
+        NORMAL_SIZE = 20
+        HIDDEN_SIZE = 0
+        show_track = self.show_track_vertices_checkbox.isChecked()
+        show_origin_decay = self.show_origin_decay_checkbox.isChecked()
+
         border_colors = []
+        sizes = []
         for point in data:
             is_length = matches(point, length_points)
             is_radius = matches(point, radius_points)
@@ -361,6 +379,20 @@ class ParticleTracksWidget(QWidget):
             else:
                 border_colors.append(DEFAULT_BORDER_COLOR)
 
+            # A point classified as neither (stray/unowned) always stays visible - the checkboxes only
+            # hide known origin/decay/track roles, not everything on screen. A point that's both (rare)
+            # only hides once BOTH its categories are toggled off - one checkbox unticking shouldn't
+            # hide something the other checkbox still claims should be showing.
+            if is_length and is_radius:
+                visible = show_origin_decay or show_track
+            elif is_length:
+                visible = show_origin_decay
+            elif is_radius:
+                visible = show_track
+            else:
+                visible = True
+            sizes.append(NORMAL_SIZE if visible else HIDDEN_SIZE)
+
         # Guard against the highlight-refresh feedback loop below, and reset the "next new point"
         # default back to plain grey - napari otherwise keeps whatever style we last painted onto the
         # currently-selected points and quietly applies it to the very next brand-new point too.
@@ -368,6 +400,7 @@ class ParticleTracksWidget(QWidget):
         try:
             self.layer_measurements.border_color = border_colors
             self.layer_measurements.border_width = [DEFAULT_BORDER_WIDTH] * len(data)
+            self.layer_measurements.size = sizes
             self.layer_measurements.current_border_color = DEFAULT_BORDER_COLOR
             self.layer_measurements.current_border_width = DEFAULT_BORDER_WIDTH
             # Force the repaint explicitly, rather than relying on one of the assignments above
@@ -426,11 +459,9 @@ class ParticleTracksWidget(QWidget):
                 if point is not None:
                     new_points.append([current_view, current_event, point[0], point[1]])
 
-        # Rewriting .data here is our own routine canvas rebuild, not a
-        # real user action - guard it so _on_measurement_points_changed
-        # doesn't treat this rebuild as evidence that points were
-        # deleted (that reconciliation logic must only ever react to
-        # something the user actually did to the canvas).
+        # Rewriting .data here is our own routine canvas rebuild, not a real user action - guard it so
+        # _on_measurement_points_changed doesn't treat this rebuild as evidence that points were deleted
+        # (that reconciliation logic must only ever react to something the user actually did to the canvas).
         self._syncing = True
         try:
             self.layer_measurements.selected_data = set()
@@ -438,6 +469,7 @@ class ParticleTracksWidget(QWidget):
             self.layer_measurements.selected_data = set()
         finally:
             self._syncing = False
+        self._last_synced_dims = (current_view, current_event)
 
         if selected_row is not None:
             self.table.setItem(
@@ -753,7 +785,17 @@ class ParticleTracksWidget(QWidget):
         slice), treats them as a fresh origin/decay pair or radius fit and saves that instead.
         """
         if getattr(self, "_restyling", False) or getattr(self, "_syncing", False):
-            return  # re-entered because our own restyle/sync triggered this event - stop here
+            return
+
+        current_dims_now = (self.viewer.dims.current_step[0], self.viewer.dims.current_step[1])
+        if current_dims_now != getattr(self, "_last_synced_dims", None):
+            # The View/Event slider has already moved on, but our own dims-triggered rebuild for the
+            # new slice hasn't run yet - napari can fire its own highlight event the instant the slider
+            # moves, ahead of our own listener on that same event. The canvas data at this exact moment
+            # still reflects the OLD slice, so comparing it against anything would be comparing against
+            # a stale, about-to-be-replaced snapshot. Bail out - our own sync callback is about to run
+            # and fix this properly.
+            return
 
         try:
             selected_row = self._get_selected_row()
