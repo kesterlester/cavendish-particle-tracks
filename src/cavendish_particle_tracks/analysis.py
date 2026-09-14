@@ -182,6 +182,9 @@ class ViewData:
     track_points: list[list[float]] = field(default_factory=list)
     radius_px: float | None = None
     length_px: float | None = None
+    decay_angle_lines: list[list[list[float]]] | None = None
+    phi_proton: float | None = None
+    phi_pion: float | None = None
 
     def set_origin(self, point: list[float] | None) -> None:
         self.origin = point
@@ -220,6 +223,29 @@ class ViewData:
             self.radius_px = radius(*self.track_points)
         else:
             self.radius_px = None
+
+    def set_decay_angle_lines(self, lines: list[list[list[float]]] | None) -> None:
+        """lines is [lambda_line, proton_line, pion_line], each a 2-point [start, end] pair - the
+        same shape the Decay Angles Tool already drags around on screen. Pass None to clear a
+        previous measurement.
+        """
+        self.decay_angle_lines = lines
+        self._recompute_decay_angles()
+
+    def _recompute_decay_angles(self) -> None:
+        from ._calculate import angle
+
+        if self.decay_angle_lines is None:
+            self.phi_proton = None
+            self.phi_pion = None
+            return
+
+        lambda_line, proton_line, pion_line = self.decay_angle_lines
+        # The Lambda travels towards the decay vertex, not away from it, so its line needs reversing
+        # before comparing directions - same convention the (retired) decay angles dialog used.
+        lambda_line_reversed = list(reversed(lambda_line))
+        self.phi_proton = angle(lambda_line_reversed, proton_line)
+        self.phi_pion = angle(lambda_line_reversed, pion_line)
 
 
 # Idea is to save a list of ParticleDecays as we go along, and then pandas.DataFrame(list_of_particles) does all the magic

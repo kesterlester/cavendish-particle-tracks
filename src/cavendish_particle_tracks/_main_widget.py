@@ -30,7 +30,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from ._decay_angles_dialog import DecayAnglesDialog
+from ._decay_angles_dialog import ANGLES_LAYER_NAME, DecayAnglesDialog
 from ._image_calibration_dialog import ImageCalibrationDialog
 from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
@@ -111,6 +111,9 @@ class ParticleTracksWidget(QWidget):
         self.show_origin_decay_checkbox.setChecked(True)
         self.show_all_processes_checkbox = QCheckBox("Show all processes")
         self.show_all_processes_checkbox.setChecked(False)
+        self.show_decay_angles_checkbox = QCheckBox("Show decay angle diagram")
+        self.show_decay_angles_checkbox.setChecked(False)
+        self.show_decay_angles_checkbox.setEnabled(False)
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
         self.save_data_button = QPushButton("Save process table")
@@ -134,6 +137,7 @@ class ParticleTracksWidget(QWidget):
         self.show_track_vertices_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
         self.show_origin_decay_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
         self.show_all_processes_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
+        self.show_decay_angles_checkbox.stateChanged.connect(lambda _: self._on_toggle_decay_angle_diagram())
         #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
         #self.apply_magnification_button.toggled.connect(
         #    self._on_click_apply_magnification
@@ -156,6 +160,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_track_vertices_checkbox, 3, 0)
             self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
             self.buttonbox.addWidget(self.show_all_processes_checkbox, 4, 0)
+            self.buttonbox.addWidget(self.show_decay_angles_checkbox, 4, 1)
             #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
             #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
@@ -175,6 +180,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_track_vertices_checkbox)
             self.buttonbox.addWidget(self.show_origin_decay_checkbox)
             self.buttonbox.addWidget(self.show_all_processes_checkbox)
+            self.buttonbox.addWidget(self.show_decay_angles_checkbox)
             self.buttonbox.addWidget(self.table)
             #self.buttonbox.addWidget(self.apply_magnification_button)
             #self.buttonbox.addWidget(self.stereoshift_button)
@@ -307,6 +313,9 @@ class ParticleTracksWidget(QWidget):
         dims-mismatch guard in _sync_measurement_layer_to_selected_process), so it can't be
         skipped early just because there's no event to jump to.
         """
+        # Reset every time the selected row changes, regardless of the new process's type.
+        self.show_decay_angles_checkbox.setChecked(False)
+
         self.set_button_availability()
 
         try:
@@ -508,15 +517,17 @@ class ParticleTracksWidget(QWidget):
             ## think about these two + cal once done.
             self.image_calibration_button.setEnabled(True)
             #self.stereoshift_button.setEnabled(True)
-            if self.data[selected_row].index < 4:
-                self.decay_angles_button.setEnabled(False)
-                return
-            elif self.data[selected_row].index == 4:
+            if self.data[selected_row].index == 4:
                 self.decay_angles_button.setEnabled(True)
-                return
+                self.show_decay_angles_checkbox.setEnabled(True)
+            else:
+                self.decay_angles_button.setEnabled(False)
+                self.show_decay_angles_checkbox.setEnabled(False)
+            return
         except IndexError:
             self.delete_process.setEnabled(False)
             self.decay_angles_button.setEnabled(False)
+            self.show_decay_angles_checkbox.setEnabled(False)
             # self.apply_magnification_button.setEnabled(False)
             #self.stereoshift_button.setEnabled(False)
             # self.magnification_button.setEnabled(False)
@@ -620,6 +631,102 @@ class ParticleTracksWidget(QWidget):
 
     # _on_click_radius() and _on_click_length() used to live here - now removed that selecting
     # points auto-calculates both live (see _on_measurement_points_changed in _setup_measurement_layer).
+
+    def _setup_decay_angle_diagram_layer(self):
+        """Create the Lambda/p/pi decay-angle diagram directly on the main canvas - reusing the exact
+        same layer (and default starting position) the Decay Angles popup already creates, so whichever
+        path someone uses, they're looking at the same shapes. Only gets the diagram onto the canvas and
+        toggleable; making it view/event-aware and remembering its position per process is separate.
+        """
+        if ANGLES_LAYER_NAME in self.viewer.layers:
+            return self.viewer.layers[ANGLES_LAYER_NAME]
+
+        origin_x = self.camera_center[0]
+        origin_y = self.camera_center[1]
+        zoom_factor = self.viewer.camera.zoom
+
+        lambda_line = np.array([
+            [origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor],
+            [origin_x + -100 / zoom_factor, origin_y + -100 / zoom_factor],
+        ])
+        proton_line = np.array([
+            [origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor],
+            [origin_x + 200 / zoom_factor, origin_y + 300 / zoom_factor],
+        ])
+        pion_line = np.array([
+            [origin_x + 100 / zoom_factor, origin_y + 200 / zoom_factor],
+            [origin_x + 110 / zoom_factor, origin_y + 300 / zoom_factor],
+        ])
+
+        lines = [lambda_line, proton_line, pion_line]
+        colors = ["green", "red", "blue"]
+        text = {
+            "string": ["Λ", "p", "π"],
+            "size": 20,
+            "color": colors,
+            "translation": np.array([-30, 0]),
+        }
+
+        shapes_layer = self.viewer.add_shapes(
+            lines,
+            name=ANGLES_LAYER_NAME,
+            shape_type=["line"] * 3,
+            edge_width=5,
+            edge_color=colors,
+            face_color=colors,
+            text=text,
+            ndim=2,
+        )
+        shapes_layer.events.data.connect(self._enforce_decay_angle_lines_coincident)
+        shapes_layer.events.visible.connect(self._on_decay_angle_layer_visibility_changed)
+        return shapes_layer
+
+    def _on_decay_angle_layer_visibility_changed(self, event=None) -> None:
+        """Keep the checkbox honest if the diagram's visibility changes some other way - e.g.
+        cancelling the Decay Angles popup hides this same shared layer directly, which would
+        otherwise leave the checkbox showing 'checked' while the diagram is actually hidden.
+        """
+        if getattr(self, "_setting_decay_angle_visibility", False):
+            return
+        layer = self.viewer.layers[ANGLES_LAYER_NAME]
+        self._setting_decay_angle_visibility = True
+        try:
+            self.show_decay_angles_checkbox.setChecked(layer.visible)
+        finally:
+            self._setting_decay_angle_visibility = False
+
+    def _enforce_decay_angle_lines_coincident(self, event=None) -> None:
+        """Keep the Lambda/p/pi lines meeting at a shared decay vertex -
+        the same correction the Decay Angles popup already applies, wired
+        up here too so it works even if someone only ever uses the
+        checkbox and never opens the popup.
+        """
+        if event is None or event.action != "changed":
+            return
+
+        layer = self.viewer.layers[ANGLES_LAYER_NAME]
+        shapes_modified = event.data_indices
+        data = layer.data
+        if len(shapes_modified) in (1, 2):
+            for i in range(3):
+                if (i not in shapes_modified) and (
+                        layer.data[i][0] != layer.data[shapes_modified[0]][0]
+                ).any():
+                    data[i][0] = layer.data[shapes_modified[0]][0]
+                    layer.data = data
+
+    def _on_toggle_decay_angle_diagram(self) -> None:
+        if getattr(self, "_setting_decay_angle_visibility", False):
+            return
+        layer = self._setup_decay_angle_diagram_layer()
+        self._setting_decay_angle_visibility = True
+        try:
+            if self.show_decay_angles_checkbox.isChecked():
+                self._activate_calibration_layer(layer)
+            else:
+                self._deactivate_calibration_layer(layer)
+        finally:
+            self._setting_decay_angle_visibility = False
 
     def _on_click_decay_angles(self) -> DecayAnglesDialog:
         """When the 'Calculate decay angles' buttong is clicked, open the decay angles dialog"""
