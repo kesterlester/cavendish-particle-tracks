@@ -41,6 +41,7 @@ from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, VTX_OR
 ENABLE_MAG = False
 
 MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
+OTHER_PROCESSES_LAYER_NAME = "Other Processes (view only)"
 IMAGE_LAYER_NAME = "Bubble Chamber Data"
 
 _singleton_instance = None
@@ -108,6 +109,8 @@ class ParticleTracksWidget(QWidget):
         self.show_track_vertices_checkbox.setChecked(True)
         self.show_origin_decay_checkbox = QCheckBox("Show length points")
         self.show_origin_decay_checkbox.setChecked(True)
+        self.show_all_processes_checkbox = QCheckBox("Show all processes")
+        self.show_all_processes_checkbox.setChecked(False)
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
         self.save_data_button = QPushButton("Save process table")
@@ -128,6 +131,9 @@ class ParticleTracksWidget(QWidget):
         self.decay_angles_button.clicked.connect(self._on_click_decay_angles)
         self.show_track_vertices_checkbox.stateChanged.connect(lambda _: self._restyle_measurement_points())
         self.show_origin_decay_checkbox.stateChanged.connect(lambda _: self._restyle_measurement_points())
+        self.show_track_vertices_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
+        self.show_origin_decay_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
+        self.show_all_processes_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
         #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
         #self.apply_magnification_button.toggled.connect(
         #    self._on_click_apply_magnification
@@ -149,6 +155,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.save_data_button, 2, 1)
             self.buttonbox.addWidget(self.show_track_vertices_checkbox, 3, 0)
             self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
+            self.buttonbox.addWidget(self.show_all_processes_checkbox, 4, 0)
             #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
             #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
@@ -167,6 +174,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.decay_angles_button)
             self.buttonbox.addWidget(self.show_track_vertices_checkbox)
             self.buttonbox.addWidget(self.show_origin_decay_checkbox)
+            self.buttonbox.addWidget(self.show_all_processes_checkbox)
             self.buttonbox.addWidget(self.table)
             #self.buttonbox.addWidget(self.apply_magnification_button)
             #self.buttonbox.addWidget(self.stereoshift_button)
@@ -484,6 +492,7 @@ class ParticleTracksWidget(QWidget):
             )
 
         self._restyle_measurement_points()
+        self._sync_other_processes_layer()
 
     def set_button_availability(self) -> None:
         images_imported = False
@@ -746,6 +755,7 @@ class ParticleTracksWidget(QWidget):
 
         # Create measurements layer if not already there
         self.layer_measurements = self._setup_measurement_layer()
+        self._setup_other_processes_layer()
 
         # Move bubble chamber layer to the bottom
         self.viewer.layers.move(self.viewer.layers.index(bubble_chamber_layer), 0)
@@ -772,6 +782,101 @@ class ParticleTracksWidget(QWidget):
             layer.events.data.connect(self._on_measurement_points_changed)
             layer.events.highlight.connect(self._on_measurement_points_changed)
             return layer
+
+    def _setup_other_processes_layer(self):
+        """A second, non-interactive points layer showing every OTHER process's saved points for the
+        current view/event, for visual comparison. Deliberately one-way (data -> canvas only) - nothing
+        ever reads this layer's own contents back to infer anything. editable=False should make it unclickable.
+        """
+        if OTHER_PROCESSES_LAYER_NAME in self.viewer.layers:
+            return self.viewer.layers[OTHER_PROCESSES_LAYER_NAME]
+        layer = self.viewer.add_points(
+            name=OTHER_PROCESSES_LAYER_NAME,
+            ndim=4,
+            size=20,
+            border_width=7,
+            border_width_is_relative=False,
+        )
+        layer.editable = False
+        layer.opacity = 0.4
+        # Adding a new layer makes napari activate it automatically, silently stealing "active layer"
+        # status. Hand it straight back, or every point placed afterwards lands on this layer instead.
+        self.viewer.layers.selection.active = self.layer_measurements
+        return layer
+
+    def _sync_other_processes_layer(self) -> None:
+        """Populate the read-only 'other processes' layer for the current
+        view/event, excluding whichever process is selected (its points
+        already live on the interactive layer - no need to duplicate them
+        here). Uses the same white-dot/coloured-ring look as the
+        interactive layer; the layer's own opacity is the only thing that
+        distinguishes 'theirs' from 'mine'.
+        """
+        if OTHER_PROCESSES_LAYER_NAME not in self.viewer.layers:
+            return
+
+        layer = self.viewer.layers[OTHER_PROCESSES_LAYER_NAME]
+
+        if not self.show_all_processes_checkbox.isChecked():
+            layer.data = []
+            return
+
+        current_view = self.viewer.dims.current_step[0]
+        current_event = self.viewer.dims.current_step[1]
+        try:
+            selected_row = self._get_selected_row()
+        except IndexError:
+            selected_row = None
+
+        show_track = self.show_track_vertices_checkbox.isChecked()
+        show_origin_decay = self.show_origin_decay_checkbox.isChecked()
+
+        NORMAL_SIZE = 20
+        HIDDEN_SIZE = 0
+        LENGTH_COLOR = "cornflowerblue"
+        RADIUS_COLOR = "mediumorchid"
+
+        BOTH_COLOR = "slateblue"
+
+        def as_xy(point):
+            return (round(float(point[0]), 6), round(float(point[1]), 6))
+
+        points = []
+        border_colors = []
+        sizes = []
+        for i, particle in enumerate(self.data):
+            if i == selected_row:
+                continue
+            if particle.event_number != current_event:
+                continue
+            view_data = particle.views[current_view]
+
+            length_xy = {as_xy(p) for p in (view_data.origin, view_data.decay) if p is not None}
+            radius_xy = {as_xy(p) for p in view_data.track_points}
+
+            for xy in length_xy | radius_xy:
+                is_length = xy in length_xy
+                is_radius = xy in radius_xy
+                if is_length and is_radius:
+                    color = BOTH_COLOR
+                    visible = show_origin_decay or show_track
+                elif is_length:
+                    color = LENGTH_COLOR
+                    visible = show_origin_decay
+                else:
+                    color = RADIUS_COLOR
+                    visible = show_track
+
+                points.append([current_view, current_event, xy[0], xy[1]])
+                border_colors.append(color)
+                sizes.append(NORMAL_SIZE if visible else HIDDEN_SIZE)
+
+        layer.data = points
+        if points:
+            layer.face_color = ["white"] * len(points)
+            layer.border_color = border_colors
+            layer.border_width = [7] * len(points)
+            layer.size = sizes
 
     def _on_measurement_points_changed(self, event=None) -> None:
         """Live auto-calculation and cleanup - fires whenever a point on the measurement
