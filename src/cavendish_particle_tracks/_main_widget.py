@@ -118,6 +118,7 @@ class ParticleTracksWidget(QWidget):
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
         self.save_data_button = QPushButton("Save process table")
+        self.load_data_button = QPushButton("Load process table")
 
         # setup particle table
         self.table = self._set_up_table()
@@ -143,6 +144,7 @@ class ParticleTracksWidget(QWidget):
         #    self._on_click_apply_magnification
         #)
         self.save_data_button.clicked.connect(self._on_click_save)
+        self.load_data_button.clicked.connect(self._on_click_load)
 
         self.image_calibration_button.clicked.connect(self._on_click_calibration)
         # TODO: find which of these works
@@ -161,9 +163,10 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
             self.buttonbox.addWidget(self.show_decay_angles_checkbox, 4, 0)
             self.buttonbox.addWidget(self.show_fiducials_checkbox, 4, 1)
-            #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
+            self.buttonbox.addWidget(self.load_data_button, 5, 0)
+            # self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
-            #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
+            # self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
 
             self.buttonbox.setColumnStretch(0, 1)
             self.buttonbox.setColumnStretch(1, 1)
@@ -190,6 +193,7 @@ class ParticleTracksWidget(QWidget):
             #self.buttonbox.addWidget(self.stereoshift_button)
             self.buttonbox.addWidget(self.image_calibration_button)
             self.buttonbox.addWidget(self.save_data_button)
+            self.buttonbox.addWidget(self.load_data_button)
             self.setLayout(self.buttonbox)
 
         # Disable some native napari controls
@@ -330,6 +334,27 @@ class ParticleTracksWidget(QWidget):
 
         print("Column ", columntext, " not in the table")
         return -1
+
+    def _add_or_update_table_row(self, row_index: int, particle) -> None:
+        """Populate a table row's index/name/event_number/saved_vertices cells from a
+        ParticleDecay or CalibrationRow already sitting at self.data[row_index]. Shared
+        by process creation, calibration row sync, and loading a saved session, so all
+        three ways a row can appear stay in sync automatically instead of drifting apart.
+        """
+        self.table.setItem(row_index, self._get_table_column_index("index"), QTableWidgetItem(str(particle.index)))
+        self.table.setItem(row_index, self._get_table_column_index("name"), QTableWidgetItem(particle.name))
+        self.table.setItem(row_index, self._get_table_column_index("event_number"),
+                           QTableWidgetItem(str(particle.event_number)))
+        self._refresh_saved_vertices_cell(row_index)
+
+    def _rebuild_table_from_data(self) -> None:
+        """Clear and fully repopulate the table from self.data - used after loading a saved session,
+        where every row needs creating at once rather than one at a time like normal process creation.
+        """
+        self.table.setRowCount(0)
+        for i, particle in enumerate(self.data):
+            self.table.insertRow(i)
+            self._add_or_update_table_row(i, particle)
 
     def _refresh_saved_vertices_cell(self, selected_row: int) -> None:
         self.table.setItem(
@@ -906,6 +931,77 @@ class ParticleTracksWidget(QWidget):
     #     self.stereoshift_dlg.raise_()
     #     return self.stereoshift_dlg
 
+    def _on_click_load(self) -> None:
+        """Restore a previously saved session (process rows, calibration rows, and generic fiducial
+        templates) from a .pkl file, replacing whatever's currently in the table. Only .pkl is
+        supported - CSV is a lossy, display-only format (e.g. the views field doesn't round-trip
+        through it at all), so it was never meant to be loaded back in.
+        """
+        if IMAGE_LAYER_NAME not in self.viewer.layers:
+            napari.utils.notifications.show_error(
+                "Load images first - the event/view slots a saved session refers to don't exist until then."
+            )
+            return
+
+        if self.dirty_things():
+            confirmation_dialog = QMessageBox()
+            confirmation_dialog.setText("Loading will discard the current, unsaved session.")
+            confirmation_dialog.setInformativeText("Do you want to continue?")
+            confirmation_dialog.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+            confirmation_dialog.setDefaultButton(QMessageBox.Cancel)
+            if confirmation_dialog.exec() != QMessageBox.Yes:
+                return
+
+        file_dialog = QFileDialog(self)
+        file_dialog.setAcceptMode(QFileDialog.AcceptOpen)
+        file_dialog.setNameFilter("Pickle files (*.pkl)")
+        file_name, _ = file_dialog.getOpenFileName(
+            self,
+            "Load file",
+            "./",
+            "Pickle files (*.pkl)",
+            "",
+            QFileDialog.DontUseNativeDialog,
+        )
+
+        if file_name in {"", None}:
+            return
+
+        if not file_name.endswith(".pkl"):
+            napari.utils.notifications.show_error(
+                "Only .pkl files can be loaded - CSV is a lossy, display-only export format."
+            )
+            return
+
+        try:
+            with open(file_name, "rb") as handle:
+                session = pickle.load(handle)
+        except Exception as e:
+            napari.utils.notifications.show_error(f"Could not load {file_name}: {e}")
+            return
+
+        self.table.clearSelection()
+        self.data = session.data
+        self._rebuild_table_from_data()
+
+        # Restore calibration: generic templates come straight from the saved session; event_views
+        # is rebuilt from the just-restored CalibrationRow entries rather than also saved separately,
+        # so there's only ever one copy of per-event stamp data to keep consistent.
+        self.calibration_manager.calibration_data.generic_templates = session.generic_templates
+        self.calibration_manager.calibration_data.event_views = {}
+        for particle in self.data:
+            if isinstance(particle, CalibrationRow):
+                for view_index, view_data in enumerate(particle.views):
+                    if view_data.stamped:
+                        self.calibration_manager.calibration_data.event_views[
+                            (particle.event_number, view_index)] = view_data
+
+        import copy
+        self._data_at_last_save = copy.deepcopy(self.data)  # a freshly loaded session isn't "dirty"
+
+        self.set_button_availability()
+        napari.utils.notifications.show_info("Loaded " + file_name)
+
     def _on_click_load_data(self) -> None:
         """When the 'Load data' button is clicked, a dialog opens to select the folder containing the data.
         The folder should contain three subfolders named as variations of 'view1', 'view2' and 'view3', and each subfolder should contain the same number of images.
@@ -1267,16 +1363,7 @@ class ParticleTracksWidget(QWidget):
                 self.data.append(new_row)
                 self.table.insertRow(self.table.rowCount())
                 row_index = self.table.rowCount() - 1
-                self.table.setItem(
-                    row_index, self._get_table_column_index("index"), QTableWidgetItem(str(new_row.index))
-                )
-                self.table.setItem(
-                    row_index, self._get_table_column_index("name"), QTableWidgetItem(new_row.name)
-                )
-                self.table.setItem(
-                    row_index, self._get_table_column_index("event_number"), QTableWidgetItem(str(new_row.event_number))
-                )
-                self._refresh_saved_vertices_cell(row_index)
+                self._add_or_update_table_row(row_index, new_row)
 
     def _on_click_new_process(self) -> None:
         """When the 'New process' button is clicked, append a new blank row to
@@ -1305,32 +1392,9 @@ class ParticleTracksWidget(QWidget):
 
         # add particle (== new row) to the table and select it
         self.table.insertRow(self.table.rowCount())
-        self.table.selectRow(self.table.rowCount() - 1)
-        self.table.setItem(
-            self.table.rowCount() - 1,
-            self._get_table_column_index("index"),
-            QTableWidgetItem(str(new_particle.index)),
-        )
-        self.table.setItem(
-            self.table.rowCount() - 1,
-            self._get_table_column_index("name"),
-            QTableWidgetItem(new_particle.name),
-        )
-        self.table.setItem(
-            self.table.rowCount() - 1,
-            self._get_table_column_index("event_number"),
-            QTableWidgetItem(str(new_particle.event_number)),
-        )
-        self.table.setItem(
-            self.table.rowCount() - 1,
-            self._get_table_column_index("saved_vertices"),
-            QTableWidgetItem(str(new_particle.saved_vertices)),
-        )
-        #self.table.setItem(
-        #    self.table.rowCount() - 1,
-        #    self._get_table_column_index("magnification"),
-        #    QTableWidgetItem(str(new_particle.magnification)),
-        #)
+        row_index = self.table.rowCount() - 1
+        self.table.selectRow(row_index)
+        self._add_or_update_table_row(row_index, new_particle)
 
         print(self.data[-1])
         self.particle_decays_menu.setCurrentIndex(0)
