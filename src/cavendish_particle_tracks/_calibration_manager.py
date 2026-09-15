@@ -124,7 +124,6 @@ class CalibrationManager:
                             ( self.event_calibration_layer().as_layer_data_tuple(), ) # Don't forget that comma!
         return ans
 
-
     def event_calibration_layer(self) -> napari.layers.Points:
         # TODO: This could break if the user first created a layer with exactly the right name before we construct.
         # Maybe should not reference by NAME but keep a reference.
@@ -134,16 +133,43 @@ class CalibrationManager:
 
         # Layer does not already exist, so construct and return it:
         layer = self.parent.viewer.add_points(name=PER_IMAGE_CALIBRATION_LAYER_NAME, ndim=4, visible=False)
-        layer.properties = { "labels" : [], }
+        layer.properties = {"labels": np.array([], dtype=object), }
         print(f"MOO SEE {layer.properties}")
         layer.text = {
-            'string': 'labels', # This is a key in properties. Somehow it causes the error "Applying the encoding failed. Using the fallback value instead."
+            'string': 'labels',
+            # This is a key in properties. Somehow it causes the error "Applying the encoding failed. Using the fallback value instead."
             'color': 'white',
             'size': 12,  # text size
             'anchor': 'center',
             'translation': np.array([0, 0, -150, 0]),  # move text 150 (data) pixels up.  4D since 4D
         }
+        layer.events.data.connect(self._sync_calibration_data_from_event_layer)
         return layer
+
+    def _sync_calibration_data_from_event_layer(self, event=None) -> None:
+        """Rebuild self.calibration_data.event_views entirely from the per-image calibration
+        layer's current contents - a full rebuild rather than tracking individual adds/removes,
+        same reasoning as the generic-template sync: cheap given the realistic number of stamps,
+        and it avoids the per-point diffing bugs the measurement layer needed real work to get
+        right elsewhere in this refactor. This also naturally handles deletions, since there's
+        no explicit 'remove a stamp' menu action - a student can only delete one via napari's
+        own selection tool, which still fires this same event.
+        """
+        layer = self.event_calibration_layer()
+        self.calibration_data.event_views = {}
+        labels = layer.properties.get("labels", [])
+        for i, point in enumerate(layer.data):
+            if i >= len(labels):
+                continue
+            name = labels[i]
+            if name not in FIDUCIAL_NAMES:
+                continue
+            view = int(point[0])
+            evt = int(point[1])
+            xy = [float(point[2]), float(point[3])]
+            self.calibration_data.stamp(evt, view, name, xy)
+
+        print("event_views now:", self.calibration_data.event_views)
 
     def _sync_generic_template_from_layer(self, view_index) -> None:
         """Mirror one generic calibration layer's current fiducial positions into
@@ -463,12 +489,21 @@ class CalibrationManager:
         # Extend xy coords to 4D by adding view and event:
         fiducial_coords_4d_for_this_fiducial_in_view = [view, current_event, xy[0], xy[1]]
 
+        # destination_layer.add() combined with current_properties has a confirmed napari quirk
+        # here: adding one new point silently overwrites EVERY existing row's "labels" property
+        # too, not just the new row's. Verified directly - printing labels immediately before and
+        # after .add() showed already-correct earlier labels get corrupted the moment a second point
+        # is added. Sidestepping it entirely: build the full new data/properties arrays ourselves and
+        # assign them wholesale, rather than trusting .add() + current_properties to do it incrementally.
+        old_data = destination_layer.data
+        old_labels = list(destination_layer.properties.get("labels", []))
+        new_point = np.array([fiducial_coords_4d_for_this_fiducial_in_view])
+        new_data = np.vstack([old_data, new_point]) if len(old_data) else new_point
+        new_labels = old_labels + [label]
 
-        #print(f'BEFORE ADD, LABELS = {destination_layer.properties["labels"]}')
+        destination_layer.data = new_data
+        destination_layer.properties = {"labels": np.array(new_labels, dtype=object)}
         destination_layer.current_symbol = "disc"
-        destination_layer.current_properties = {"labels": label}
-        destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
-        #print(f'AFTER ADD, LABELS = {destination_layer.properties["labels"]}')
 
         destination_layer.text = destination_layer.text # Needed to get layer.text to become "aware" of property changes
         self.refresh_symbol_sizes()
@@ -677,9 +712,9 @@ After event.type='mouse_release' event.button=2
             from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
 
             if type == "front":
-                fixed_names = list(FIDUCIAL_FRONT.keys())
+                fixed_names = sorted(FIDUCIAL_FRONT.keys())
             elif type == "back":
-                fixed_names = list(FIDUCIAL_BACK.keys())
+                fixed_names = sorted(FIDUCIAL_BACK.keys())
             else:
                 fixed_names = ["origin", "decay", ]
 
