@@ -169,6 +169,7 @@ class CalibrationManager:
             xy = [float(point[2]), float(point[3])]
             self.calibration_data.stamp(evt, view, name, xy)
         self.parent._sync_calibration_rows_into_table()
+        self.parent.set_button_availability()
 
         print("event_views now:", self.calibration_data.event_views)
 
@@ -189,6 +190,7 @@ class CalibrationManager:
             name = labels[i]
             if name in FIDUCIAL_NAMES:
                 template.set_position(name, [float(point[0]), float(point[1])])
+        self.parent.set_button_availability()
 
     def _setup_callbacks(self):
         for view_index, layer in enumerate(self.generic_calibration_layers()):

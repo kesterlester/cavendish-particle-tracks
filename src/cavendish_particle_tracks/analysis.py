@@ -542,3 +542,15 @@ class CalibrationRow:
             else:
                 values.append("")
         return ",".join(values) + "\n"
+
+@dataclass
+class SavedSession:
+    """Everything needed to fully restore a saved session. self.data (every ParticleDecay and
+    CalibrationRow) already round-trips through pickle with full fidelity on its own - the one
+    piece of calibration data that lives entirely outside self.data, and would otherwise be
+    silently lost on save, is the generic (event-independent) fiducial templates, so this wraps
+    both together for one save call.
+    """
+
+    data: list = field(default_factory=list)
+    generic_templates: list = field(default_factory=list)

@@ -35,7 +35,7 @@ from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, VTX_ORIGIN, VTX_DECAY, VTX_NONE
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, VTX_ORIGIN, VTX_DECAY, VTX_NONE
 
 ENABLE_MAG = False
 
@@ -547,14 +547,20 @@ class ParticleTracksWidget(QWidget):
                 images_imported = True
                 break
         self.set_UI_image_loaded(images_imported, self.bypass_force_load_data)
+
+        # Save has to be reachable even with an empty table - a student who's only calibrated
+        # generic templates so far (no process rows, nothing to select) still has real data
+        # worth saving. Base this on "is there anything to save" instead of row selection.
+        # calibration_manager doesn't exist yet the first few times this runs - it triggers
+        # layer-added events (via its own __init__) before self.calibration_manager is assigned.
+        calibration_manager = getattr(self, "calibration_manager", None)
+        generic_templates = calibration_manager.calibration_data.generic_templates if calibration_manager else []
+        has_anything_to_save = len(self.data) > 0 or any(len(t.positions) > 0 for t in generic_templates)
+        self.save_data_button.setEnabled(has_anything_to_save)
+
         try:
             selected_row = self._get_selected_row()
-            self.save_data_button.setEnabled(True)
-            # Deleting a calibration row here would be misleading - it'd only remove the table's
-            # view of it, not the actual stamps still sitting in calibration_manager.calibration_data.
-            # The next stamp/delete anywhere would just silently rebuild the row right back. Real
-            # deletion already works correctly via the per-image layer's own delete tool instead.
-            self.delete_process.setEnabled(not isinstance(self.data[selected_row], CalibrationRow))
+            self.delete_process.setEnabled(True)
             ## think about these two + cal once done.
             self.image_calibration_button.setEnabled(True)
             # self.stereoshift_button.setEnabled(True)
@@ -567,9 +573,8 @@ class ParticleTracksWidget(QWidget):
             self.delete_process.setEnabled(False)
             self.show_decay_angles_checkbox.setEnabled(False)
             # self.apply_magnification_button.setEnabled(False)
-            #self.stereoshift_button.setEnabled(False)
+            # self.stereoshift_button.setEnabled(False)
             # self.magnification_button.setEnabled(False)
-            self.save_data_button.setEnabled(False)
 
     def set_UI_image_loaded(self, loaded: bool, bypass_load_screen: bool) -> None:
         if bypass_load_screen:
@@ -1410,14 +1415,16 @@ class ParticleTracksWidget(QWidget):
     #             )
 
     def _on_click_save(self) -> None:
-        """Save list of particles to csv file.
-        When the 'Save' button is clicked, the data is saved to a csv file with the current date and time as the filename.
+        """Save list of particles to csv file. When the 'Save' button is clicked, the data
+        is saved to a csv file with the current date and time as the filename.
         """
 
-        # TODO: This is bad. There should be no reason a user cannot save
-        # an empty file. However, it seems to be here as some of the code
-        # below needs to access self.data[0] to write headers!!!
-        if not len(self.data): # Disabling as no reason not to save
+        generic_templates = self.calibration_manager.calibration_data.generic_templates
+        has_generic_calibration = any(len(t.positions) > 0 for t in generic_templates)
+
+        # TODO: CSV format still can't represent an empty process table - see the check inside
+        # the .csv branch below.
+        if not len(self.data) and not has_generic_calibration:
             napari.utils.notifications.show_error(
                 "There is no data in the table to save."
             )
@@ -1444,14 +1451,22 @@ class ParticleTracksWidget(QWidget):
 
         # Save as pickle if file_name ends with .pkl
         if file_name.endswith(".pkl"):
+            session = SavedSession(data=self.data, generic_templates=generic_templates)
             with open(file_name, "wb") as handle:
-                pickle.dump(self.data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump(session, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Save as .csv if file_name ends with .csv
         elif file_name.endswith(".csv"):
+            if not len(self.data):
+                napari.utils.notifications.show_error(
+                    "CSV can't represent calibration-only data (no process or calibration rows yet) - "
+                    "save as .pkl instead, or create at least one row first."
+                )
+                return
             with open(file_name, "w", encoding="UTF8", newline="") as f:
                 # write the header
-                f.write(",".join(self.data[0].vars_to_save()) + "\n") # TODO: FIX! Should not access data[0] as this prevents saving empty file.
+                f.write(",".join(self.data[0].vars_to_save()) + "\n")
+                # TODO: FIX! Should not access data[0] as this prevents saving empty file.
 
                 # write the data
                 f.writelines([particle.to_csv() for particle in self.data])

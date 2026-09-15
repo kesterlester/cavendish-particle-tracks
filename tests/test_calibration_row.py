@@ -14,7 +14,7 @@ def test_saved_vertices_lists_stamped_names_per_view():
     c.views[0].stamp("A", [1.0, 2.0])
     c.views[0].stamp("B'", [3.0, 4.0])
     c.views[2].stamp("C", [5.0, 6.0])
-    assert c.saved_vertices == "A+B' _ C"
+    assert c.saved_vertices == "A/B' _ C"
 
 
 def test_views_are_independent_per_row():
