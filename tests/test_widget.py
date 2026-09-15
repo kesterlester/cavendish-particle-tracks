@@ -39,7 +39,7 @@ def test_open_widget(make_napari_viewer, bypass, docking_area):
     assert widget.length_button.isEnabled() is False
     assert widget.stereoshift_button.isEnabled() is False
     assert widget.image_calibration_button.isEnabled() is False
-    assert widget.decay_angles_button.isEnabled() is False
+    assert widget.show_decay_angles_checkbox.isEnabled() is False
 
     widget.viewer.add_image(np.random.random((100, 100)), name=IMAGE_LAYER_NAME)
 
@@ -49,7 +49,7 @@ def test_open_widget(make_napari_viewer, bypass, docking_area):
     assert widget.length_button.isEnabled() is False
     assert widget.stereoshift_button.isEnabled() is False
     assert widget.image_calibration_button.isEnabled() is True
-    assert widget.decay_angles_button.isEnabled() is False
+    assert widget.show_decay_angles_checkbox.isEnabled() is False
 
 
 def test_add_new_particle_ui(cpt_widget: ParticleTracksWidget):
@@ -191,17 +191,17 @@ def test_show_hide_buttons(cpt_widget: ParticleTracksWidget):
     assert cpt_widget.delete_process.isEnabled() is False
     assert cpt_widget.radius_button.isEnabled() is False
     assert cpt_widget.length_button.isEnabled() is False
-    assert cpt_widget.decay_angles_button.isEnabled() is False
+    assert cpt_widget.show_decay_angles_checkbox.isEnabled() is False
     cpt_widget.particle_decays_menu.setCurrentIndex(1)
     assert cpt_widget.delete_process.isEnabled() is True
     assert cpt_widget.radius_button.isEnabled() is True
     assert cpt_widget.length_button.isEnabled() is True
-    assert cpt_widget.decay_angles_button.isEnabled() is False
+    assert cpt_widget.show_decay_angles_checkbox.isEnabled() is False
     cpt_widget.particle_decays_menu.setCurrentIndex(4)
     assert cpt_widget.delete_process.isEnabled() is True
     assert cpt_widget.radius_button.isEnabled() is False
     assert cpt_widget.length_button.isEnabled() is True
-    assert cpt_widget.decay_angles_button.isEnabled() is True
+    assert cpt_widget.show_decay_angles_checkbox.isEnabled() is True
 
 
 def test_close_widget(cpt_widget: ParticleTracksWidget, qtbot: QtBot):
