@@ -183,13 +183,19 @@ class CalibrationManager:
         """
         layer = self.generic_calibration_layers()[view_index]
         template = self.calibration_data.generic_templates[view_index]
+        # Reset first, not just add/overwrite - otherwise a fiducial that gets relabelled (e.g.
+        # fixing a mis-click) leaves its OLD name behind forever, frozen at its old position,
+        # looking like a third real fiducial that never actually existed. Confirmed directly: two
+        # relabels produced three saved names sharing duplicate coordinates.
+        template.positions = {}
+        template.slot_indices = {}
         labels = layer.properties.get("labels", [])
         for i, point in enumerate(layer.data):
             if i >= len(labels):
                 continue
             name = labels[i]
             if name in FIDUCIAL_NAMES:
-                template.set_position(name, [float(point[0]), float(point[1])])
+                template.set_position(name, [float(point[0]), float(point[1])], slot_index=i)
         self.parent.set_button_availability()
 
     def _setup_callbacks(self):
@@ -801,39 +807,44 @@ After event.type='mouse_release' event.button=2
         show_drop_down_menu(type)
         event.handled = True
 
-    def _default_generic_calibration_layers(self):
-
+    def _default_generic_layer_arrays(self):
+        """The default label/colour/type/symbol layout shared by every generic calibration layer,
+        plus each view's own default point positions. Factored out so a brand-new session and restoring
+        a saved one (filling in defaults for anything the save file didn't cover) share one copy
+        of this layout, instead of risking two copies drifting apart.
+        """
         from .analysis import TYPICAL_IMAGE_LONG_SIZE_PIX, TYPICAL_IMAGE_SHORT_SIZE_PIX
 
-        origin_x = 0.5 * TYPICAL_IMAGE_SHORT_SIZE_PIX # actually how far DOWN !!
-        spread_x = 0.15 * TYPICAL_IMAGE_SHORT_SIZE_PIX # actually vertical spread !!
+        origin_x = 0.5 * TYPICAL_IMAGE_SHORT_SIZE_PIX  # actually how far DOWN !!
+        spread_x = 0.15 * TYPICAL_IMAGE_SHORT_SIZE_PIX  # actually vertical spread !!
 
-        point_origin_y = 0.25 * TYPICAL_IMAGE_LONG_SIZE_PIX # actually how far ACROSS !!
+        point_origin_y = 0.25 * TYPICAL_IMAGE_LONG_SIZE_PIX  # actually how far ACROSS !!
         fid_origin_y = 0.5 * TYPICAL_IMAGE_LONG_SIZE_PIX
         fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
 
         # First position the point being measured:
-        labels = [ "origin", "decay", ]
-        symbols = [ "disc", "disc", ]
+        labels = ["origin", "decay", ]
+        symbols = ["disc", "disc", ]
         colours = ["cyan", "cyan", ]
         types = ["point", "point"]
-        points_in_generic_view = [ [origin_x, point_origin_y-0.5*fid_step_y, ],   [origin_x, point_origin_y+0.5*fid_step_y, ],  ]
+        points_in_generic_view = [[origin_x, point_origin_y - 0.5 * fid_step_y, ],
+                                  [origin_x, point_origin_y + 0.5 * fid_step_y, ], ]
 
         # Now position the Front/Back fiducial pairs:
         for i in range(CalibrationManager.num_generic_front_back_fid_pairs):
-            labels += [ "", "", ]
+            labels += ["", "", ]
             types += ["front", "back", ]
-            symbols += ["x", "x",]
+            symbols += ["x", "x", ]
             points_in_generic_view += [
                 [origin_x - spread_x, fid_origin_y + i * fid_step_y, ],
                 [origin_x + spread_x, fid_origin_y + i * fid_step_y, ],
             ]
-            if i==0:
+            if i == 0:
                 colours += [
                     "#55ff00",  # front fiducial (light green)
                     "#00aa00",  # back fiducial (dark green)
-                    ]
-            elif i==1:
+                ]
+            elif i == 1:
                 colours += [
                     "#ff5500",  # front fiducial (light red)
                     "#aa0000",  # back fiducial (dark red)
@@ -844,12 +855,16 @@ After event.type='mouse_release' event.button=2
                     "#0000aa",  # back fiducial (dark blue)
                 ]
 
-
         # Displace the generic points 100 to the left, or not at all, or 100 to the right, depending on view:
         points_in_view = [
-            np.array([ np.array(point)+np.array([(v-1)*100, 0,]) for point in points_in_generic_view ])
+            np.array([np.array(point) + np.array([(v - 1) * 100, 0, ]) for point in points_in_generic_view])
             for v in view_indices
         ]
+
+        return points_in_view, labels, colours, types, symbols
+
+    def _default_generic_calibration_layers(self):
+        points_in_view, labels, colours, types, symbols = self._default_generic_layer_arrays()
 
         # If in debug mode can replace the points and labels with ones that are physically interesting.
         # Don't give this option to the students!
@@ -865,17 +880,103 @@ After event.type='mouse_release' event.button=2
                 debug_points_view_0_calibration_layer,
                 debug_points_view_1_calibration_layer,
                 debug_points_view_2_calibration_layer,
-            ] # overwrites old points_in_view
+            ]  # overwrites old points_in_view
             labels = debug_point_labels_all_calibration_layers
 
         layers = [
             self._single_generic_configuration_layer
-            (v, points_in_view[v], labels, colours, types, symbols, #symbol_sizes
-            )
-             for v in view_indices
-            ]
+            (v, points_in_view[v], labels, colours, types, symbols,  # symbol_sizes
+             )
+            for v in view_indices
+        ]
 
         return layers
+
+    def _restore_generic_calibration_layers(self, generic_templates) -> None:
+        """Rebuild the 3 generic calibration layers from a loaded session's saved fiducial positions,
+        filling in the standard default position/label for any slot the save file didn't cover.
+        These layers are move-only (no add/delete), so a name missing entirely after a load would
+        otherwise be permanently unplaceable for the rest of the session.
+
+        Each name is put back in its own original slot (via slot_indices) wherever possible, so colour
+        and relative layout next to any still-unlabelled slots both survive a round-trip unchanged.
+        Falls back to claiming the first available slot of the matching type only for names with no
+        recorded slot (e.g. a .pkl saved before slot tracking existed) or a slot collision.
+        """
+        from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
+
+        points_in_view, default_labels, colours, types, symbols = self._default_generic_layer_arrays()
+
+        for view_index in range(3):
+            template = generic_templates[view_index]
+            labels = list(default_labels)
+            points = [list(p) for p in points_in_view[view_index]]
+
+            assigned_slots = set()
+            unresolved_names = []
+            for name, xy in template.positions.items():
+                slot_index = template.slot_indices.get(name)
+                is_front = name in FIDUCIAL_FRONT
+                is_back = name in FIDUCIAL_BACK
+                slot_type_matches = slot_index is not None and 0 <= slot_index < len(types) and (
+                        (is_front and types[slot_index] == "front")
+                        or (is_back and types[slot_index] == "back")
+                )
+                if slot_type_matches and slot_index not in assigned_slots:
+                    labels[slot_index] = name
+                    points[slot_index] = xy
+                    assigned_slots.add(slot_index)
+                else:
+                    unresolved_names.append(name)
+
+            if unresolved_names:
+                front_slots = [i for i, t in enumerate(types) if t == "front" and i not in assigned_slots]
+                back_slots = [i for i, t in enumerate(types) if t == "back" and i not in assigned_slots]
+                for name in sorted(unresolved_names):
+                    target_slots = front_slots if name in FIDUCIAL_FRONT else back_slots
+                    if not target_slots:
+                        continue  # nowhere left - only possible with more saved names than slots
+                    slot_index = target_slots.pop(0)
+                    labels[slot_index] = name
+                    points[slot_index] = template.positions[name]
+
+            layer = self.generic_calibration_layers()[view_index]
+            layer.data = np.array(points)
+            # All four properties keys must be rebuilt together - overwriting only "labels" would
+            # silently wipe "types", which the right-click menu depends on to know what a slot is.
+            layer.properties = {
+                "labels": np.array(labels, dtype=object),
+                "colours": colours,
+                "types": types,
+                "symbols": symbols,
+            }
+            layer.text = layer.text
+            layer.refresh()
+
+        for view_index in range(3):
+            self._sync_generic_template_from_layer(view_index)
+
+    def _restore_event_calibration_layer(self) -> None:
+        """Rebuild the per-image calibration layer's visible stamps from calibration_data.event_views
+        (already restored by the data-side load). This layer holds every event's stamps at once, sliced
+        by view/event for display, same as during normal live use.
+        """
+        layer = self.event_calibration_layer()
+        points = []
+        labels = []
+        for (event, view), fiducial_view_data in self.calibration_data.event_views.items():
+            for name, xy in fiducial_view_data.stamped.items():
+                points.append([view, event, xy[0], xy[1]])
+                labels.append(name)
+
+        layer.data = np.array(points) if points else np.empty((0, 4))
+        layer.properties = {"labels": np.array(labels, dtype=object)}
+        layer.current_symbol = "disc"
+        layer.text = layer.text
+        layer.refresh()
+        # events.data fires the instant .data is assigned above, before .properties has even run -
+        # the same lag bug fixed once already elsewhere in this file.
+        self._sync_calibration_data_from_event_layer()
 
     def _get_generic_calibration_layers_from_file(self, files_to_read_from):
         layers = []

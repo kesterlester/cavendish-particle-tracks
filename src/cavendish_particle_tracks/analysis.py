@@ -27,17 +27,24 @@ FIDUCIAL_NAMES = frozenset(FIDUCIAL_FRONT) | frozenset(FIDUCIAL_BACK)
 
 @dataclass
 class GenericFiducialTemplate:
-    """The reusable template fiducial positions for one camera view - dragged into place
-    once during general calibration, shared across every event, used as the starting point
-    before cloning a fiducial into a specific photo's own FiducialViewData.
+    """The reusable template fiducial positions for one camera view - dragged into
+    place once during general calibration, shared across every event, used as the
+    starting point before cloning a fiducial into a specific photo's own
+    FiducialViewData. slot_indices records which physical slot on the layer each
+    name currently occupies - colour is tied to slot, not name, so remembering this
+    lets a saved session be restored with the same colours and the same layout relative
+    to any still-unlabelled slots, rather than reshuffling everything alphabetically.
     """
 
     positions: dict = field(default_factory=dict)
+    slot_indices: dict = field(default_factory=dict)
 
-    def set_position(self, name: str, xy: list) -> None:
+    def set_position(self, name: str, xy: list, slot_index: int = None) -> None:
         if name not in FIDUCIAL_NAMES:
             raise ValueError(f"{name!r} is not a recognised fiducial name")
         self.positions[name] = xy
+        if slot_index is not None:
+            self.slot_indices[name] = slot_index
 
     def get_position(self, name: str):
         return self.positions.get(name)

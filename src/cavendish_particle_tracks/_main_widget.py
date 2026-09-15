@@ -996,6 +996,9 @@ class ParticleTracksWidget(QWidget):
                         self.calibration_manager.calibration_data.event_views[
                             (particle.event_number, view_index)] = view_data
 
+        self.calibration_manager._restore_generic_calibration_layers(session.generic_templates)
+        self.calibration_manager._restore_event_calibration_layer()
+
         import copy
         self._data_at_last_save = copy.deepcopy(self.data)  # a freshly loaded session isn't "dirty"
 
