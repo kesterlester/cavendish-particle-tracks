@@ -24,8 +24,6 @@ from .analysis import VIEW_NAMES, CalibrationData, FIDUCIAL_NAMES
 from .napari_tools import (
     make_move_only,
     overwrite_layer,
-    write_CPT_points_layer_to_csv,
-    read_CPT_points_layer_from_csv,
 )
 from .tools import Accumulator
 
@@ -39,20 +37,6 @@ The former (Generic or workspace points) are not associated to any individual ev
 but serve as markers for roughtly where they might be, or serve to assist in the placement
 of specific points -- i.e. points of the latter type. E.g. the former could be default 
 locations for the latter before the latter are committed or tweaked.
-
-One can currently debug the calibration manager from within the napari console after
-opening stereoshift_dialog with:
-
-import cavendish_particle_tracks as cpt
-cm = cpt.get_singleton().calibration_manager
-cm.load_calibration()
-
-import cavendish_particle_tracks as cpt
-cm = cpt.get_singleton().calibration_manager
-cm.save_calibration()
-
-Note that it will likely move into the main wiget rather than be held by the stereo
-dialog ... so the above may change.
 """
 
 view_indices = (0, 1, 2)
@@ -64,14 +48,6 @@ class CalibrationManager:
     This class stores, restores, and manages access to generic
     and specific calibration data.
     """
-
-    @staticmethod
-    def filename_for_event_calibration_layer():
-        return "CPT_calibration_layer_EVENTS.csv"
-
-    @staticmethod
-    def filename_for_generic_calibration_layer(view_index):
-        return "CPT_generic_calibration_layer_" + str(view_index) + ".csv"
 
     num_generic_front_back_fid_pairs = 3
 
@@ -227,110 +203,6 @@ class CalibrationManager:
     def all_calibration_layers(self):
         # A simple python list of napari points layers.
         return self.generic_calibration_layers() + [ self.event_calibration_layer() ]
-
-
-    @staticmethod
-    def choose_filename_for_CPT_image_calibrations(save=True, # else load
-                                                   default_name="CPT_image_calibrations.csv",
-                                                    ):
-        """
-        Opens a 'Save As' dialog for CSV files and returns the selected path (str),
-        or None if the user cancels.
-        """
-        from qtpy.QtWidgets import QFileDialog
-
-        # Filter ensures only .csv is shown/suggested
-        method = QFileDialog.getSaveFileName if save else QFileDialog.getOpenFileName
-        file_path, _ = method(
-            parent=None,
-            caption="Save CSV File As ..." if save else "Open CSV File ...",
-            directory=default_name,
-            filter="CSV Files (*.csv);;All Files (*)"
-        )
-
-        # Ensure the file has a .csv extension
-        if file_path and not file_path.lower().endswith(".csv"):
-            file_path += ".csv"
-
-        return file_path or None
-
-    def load_calibration(self):
-
-
-        # OLD DEAD RECKONING METHOD
-        ## Read the generic calibration points layers
-        # files_to_read_from = [self.filename_for_generic_calibration_layer(v) for v in view_indices]
-        # self._setup_calibration_layers(files_to_read_from = files_to_read_from )
-        ## Read the per-event calibration layers:
-        # layer_with_data_and_props = read_CPT_points_layer_from_csv(self.filename_for_event_calibration_layer())
-
-        # New adaptive method:
-        input_csv_filename = self.choose_filename_for_CPT_image_calibrations(save=False)
-        from .merge_unmerge_csv import unmerge
-        named_temporary_files = unmerge(input_csv_filename)
-        tmp_f1, tmp_f2, tmp_f3, tmp_fgeneric = named_temporary_files.values()
-        # Read the generic calibration points layers
-        self._setup_calibration_layers(files_to_read_from = [tmp_f1.name, tmp_f2.name, tmp_f3.name])
-        # Read the per-event calibration layers:
-        layer_with_data_and_props = read_CPT_points_layer_from_csv(tmp_fgeneric.name)
-        #clean up:
-        for tmp in named_temporary_files.values():
-            tmp.close()
-
-        self.event_calibration_layer().data = layer_with_data_and_props.data
-        self.event_calibration_layer().properties = layer_with_data_and_props.properties
-
-        self._refresh_visibility_and_focus_of_all_calibration_layers()
-        self.refresh_symbol_sizes()
-        self.mark_clean()
-
-    def save_calibration(self):
-
-        with (
-            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view0,
-            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view1,
-            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_view2,
-            tempfile.NamedTemporaryFile(mode='w+', suffix=".csv") as f_generic,
-            #open("CPT_image_calibrations.csv", "w") as output_csv_file,
-        ):
-            #f_view0 = self.filename_for_generic_calibration_layer(0)
-            #f_view1 = self.filename_for_generic_calibration_layer(1)
-            #f_view2 = self.filename_for_generic_calibration_layer(2)
-            #f_generic = self.filename_for_event_calibration_layer()
-
-            f_views = (f_view0, f_view1, f_view2)
-            tmp_files = f_views + (f_generic,)  # don't lose that comma!
-
-            assert len(f_views) == len(VIEW_NAMES)
-            assert len(f_views) == 3
-            assert len(tmp_files) == 4
-
-            self.save_calibrations_to_separate_files(f_views, f_generic)
-
-            for f in tmp_files:
-                f.seek(0) # Rewind the files so that they are flushed and may be read from the front.
-
-            from .merge_unmerge_csv import merge
-
-            output_csv_filename = self.choose_filename_for_CPT_image_calibrations(save=True)
-
-            merge(f_view0, f_view1, f_view2, f_generic, output_csv_filename )
-
-        self.mark_clean()
-        print(f"Saved calibrations.")
-
-
-    def save_calibrations_to_separate_files(self, f_views, f_generic):
-        assert len(f_views) == len(VIEW_NAMES)
-
-        save = write_CPT_points_layer_to_csv
-        for i, layer in enumerate(self.generic_calibration_layers()):
-            save(f_views[i], layer)
-        save(f_generic, self.event_calibration_layer())
-
-
-
-
 
     # Callback for when the 'View' slider changes:
     def callback_calibration_layer_visibility(self, event):
@@ -978,35 +850,6 @@ After event.type='mouse_release' event.button=2
         # the same lag bug fixed once already elsewhere in this file.
         self._sync_calibration_data_from_event_layer()
 
-    def _get_generic_calibration_layers_from_file(self, files_to_read_from):
-        layers = []
-
-        for v, filename in zip(view_indices, files_to_read_from):
-
-            from .io import read_csv_with_constructors
-
-            #filename = self.filename_for_generic_calibration_layer(v)
-
-            Point = lambda x, y : np.array([float(x),float(y)])
-            constructors = [
-                (Point, 'pixel_row', 'pixel_col'),
-                (str, 'labels'),
-                (str, 'colours'),
-                (str, 'types'),
-                (str, 'symbols'),
-                # (int, 'symbol_sizes')
-                ]
-
-            # points, labels, colours, types, symbols, symbol_sizes = read_csv_with_constructors(filename, constructors)
-            points, labels, colours, types, symbols = read_csv_with_constructors(filename, constructors)
-
-
-            layers.append(self._single_generic_configuration_layer(
-                v, points, labels, colours, types, symbols, #symbol_sizes
-            ))
-
-        return layers
-
     def _single_generic_configuration_layer(self, view_index,
                                             points, labels, colours, types, symbols, #symbol_sizes
                                             ):
@@ -1046,12 +889,8 @@ After event.type='mouse_release' event.button=2
         }
         return layer
 
-    def _setup_calibration_layers(self, files_to_read_from=None):
-
-        if files_to_read_from is not None:
-            layers = self._get_generic_calibration_layers_from_file(files_to_read_from)
-        else:
-            layers = self._default_generic_calibration_layers()
+    def _setup_calibration_layers(self):
+        layers = self._default_generic_calibration_layers()
 
         # Overwrite data if layer already exists, otherwise make a note of new layers
         new_layers = []

@@ -30,7 +30,6 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from ._image_calibration_dialog import ImageCalibrationDialog
 from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
@@ -116,7 +115,6 @@ class ParticleTracksWidget(QWidget):
         self.show_fiducials_checkbox = QCheckBox("Show fiducial markers")
         self.show_fiducials_checkbox.setChecked(True)
         # self.stereoshift_button = QPushButton("Stereoshift")
-        self.image_calibration_button = QPushButton("Image Calibration")
         self.save_data_button = QPushButton("Save process table")
         self.load_data_button = QPushButton("Load process table")
 
@@ -146,7 +144,6 @@ class ParticleTracksWidget(QWidget):
         self.save_data_button.clicked.connect(self._on_click_save)
         self.load_data_button.clicked.connect(self._on_click_load)
 
-        self.image_calibration_button.clicked.connect(self._on_click_calibration)
         # TODO: find which of these works
         # https://napari.org/stable/gallery/custom_mouse_functions.html
         # self.viewer.mouse_press.callbacks.connect(self._on_mouse_press)
@@ -155,6 +152,7 @@ class ParticleTracksWidget(QWidget):
         if self.docking_area == "bottom":
             self.buttonbox = QGridLayout()
             self.buttonbox.addWidget(self.load_button, 0, 0)
+            self.buttonbox.addWidget(self.load_data_button, 0, 1)
             self.buttonbox.addWidget(self.particle_decays_menu, 1, 0)
             self.buttonbox.addWidget(self.delete_process, 1, 1)
             self.buttonbox.addWidget(self.save_data_button, 2, 0)
@@ -163,9 +161,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
             self.buttonbox.addWidget(self.show_decay_angles_checkbox, 4, 0)
             self.buttonbox.addWidget(self.show_fiducials_checkbox, 4, 1)
-            self.buttonbox.addWidget(self.load_data_button, 5, 0)
             # self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
-            self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
             # self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
 
             self.buttonbox.setColumnStretch(0, 1)
@@ -189,9 +185,8 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_decay_angles_checkbox)
             self.buttonbox.addWidget(self.show_fiducials_checkbox)
             self.buttonbox.addWidget(self.table)
-            #self.buttonbox.addWidget(self.apply_magnification_button)
-            #self.buttonbox.addWidget(self.stereoshift_button)
-            self.buttonbox.addWidget(self.image_calibration_button)
+            # self.buttonbox.addWidget(self.apply_magnification_button)
+            # self.buttonbox.addWidget(self.stereoshift_button)
             self.buttonbox.addWidget(self.save_data_button)
             self.buttonbox.addWidget(self.load_data_button)
             self.setLayout(self.buttonbox)
@@ -217,8 +212,7 @@ class ParticleTracksWidget(QWidget):
         # self.mag_b = 0.0
 
         # Dialog pointers to reuse
-        self.mag_dlg: ImageCalibrationDialog | None = None
-        #self.stereoshift_dlg: StereoshiftDialog | None = None
+        # self.stereoshift_dlg: StereoshiftDialog | None = None
 
         @self.viewer.layers.events.connect
         def _on_layerlist_changed(event):
@@ -586,8 +580,6 @@ class ParticleTracksWidget(QWidget):
         try:
             selected_row = self._get_selected_row()
             self.delete_process.setEnabled(True)
-            ## think about these two + cal once done.
-            self.image_calibration_button.setEnabled(True)
             # self.stereoshift_button.setEnabled(True)
             if self.data[selected_row].index == 4:
                 self.show_decay_angles_checkbox.setEnabled(True)
@@ -607,17 +599,14 @@ class ParticleTracksWidget(QWidget):
         if loaded:
             self.load_button.setEnabled(False)
             self.particle_decays_menu.setEnabled(True)
-            self.image_calibration_button.setEnabled(True)
         else:
             self.load_button.setEnabled(True)
             self.particle_decays_menu.setEnabled(False)
             self.delete_process.setEnabled(False)
             self.show_decay_angles_checkbox.setEnabled(False)
-            #self.stereoshift_button.setEnabled(False)
-            self.save_data_button.setEnabled(False)
-            self.image_calibration_button.setEnabled(False)
-            #if ENABLE_MAG:
-            #self.apply_magnification_button.setEnabled(False)
+            # self.stereoshift_button.setEnabled(False)
+            # if ENABLE_MAG:
+            # self.apply_magnification_button.setEnabled(False)
 
     def _selected_points_are_on_current_slice(self, selected_points) -> bool:
         """Check that the selected points are in the current slice of the viewer"""
@@ -952,10 +941,7 @@ class ParticleTracksWidget(QWidget):
             if confirmation_dialog.exec() != QMessageBox.Yes:
                 return
 
-        file_dialog = QFileDialog(self)
-        file_dialog.setAcceptMode(QFileDialog.AcceptOpen)
-        file_dialog.setNameFilter("Pickle files (*.pkl)")
-        file_name, _ = file_dialog.getOpenFileName(
+        file_name, _ = QFileDialog.getOpenFileName(
             self,
             "Load file",
             "./",
@@ -968,10 +954,7 @@ class ParticleTracksWidget(QWidget):
             return
 
         if not file_name.endswith(".pkl"):
-            napari.utils.notifications.show_error(
-                "Only .pkl files can be loaded - CSV is a lossy, display-only export format."
-            )
-            return
+            file_name += ".pkl"
 
         try:
             with open(file_name, "rb") as handle:
@@ -1431,15 +1414,6 @@ class ParticleTracksWidget(QWidget):
                 del self.data[selected_row]
                 self.table.removeRow(selected_row)
 
-    def _on_click_calibration(self) -> ImageCalibrationDialog:
-        """When the 'image calibratiob' button is clicked, open the image calibration dialog"""
-        if self.mag_dlg is None:
-            self.mag_dlg = ImageCalibrationDialog(self)
-
-        self.mag_dlg.show()
-        self.mag_dlg.raise_()
-        return self.mag_dlg
-
     # def _propagate_magnification(self, a: float, b: float) -> None:
     #     """Assigns a and b to the class magnification parameters and to each of the particles in data"""
     #     self.mag_a = a
@@ -1498,23 +1472,26 @@ class ParticleTracksWidget(QWidget):
             print("There is no data in the table to save.")
             return
 
-        # setup UI
-        file_dialog = QFileDialog(self)
-        file_dialog.setAcceptMode(QFileDialog.AcceptSave)
-        file_dialog.setNameFilter("CSV files (*.csv); Pickle files (*.pkl)")
-        file_dialog.setDefaultSuffix("csv")
-        # retrieve image folder
-        file_name, _ = file_dialog.getSaveFileName(
+        # getSaveFileName is a static Qt method - calling it on an instance (the old code's
+        # file_dialog.getSaveFileName(...)) still just invokes the static version, silently
+        # ignoring any setNameFilter/setDefaultSuffix/setAcceptMode set on that instance. That's
+        # the actual reason neither extension was ever being auto-appended. Calling it properly
+        # as a static method and handling the extension explicitly, using the filter the user
+        # actually picked (the second return value, previously discarded).
+        file_name, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Save file",
             "./",
-            "CSV files (*.csv);;Pickle files (*.pkl)",
-            "CSV files (*.csv)",
+            "Pickle files (*.pkl);;CSV files (*.csv)",
+            "Pickle files (*.pkl)",
             QFileDialog.DontUseNativeDialog,
         )
 
         if file_name in {"", None}:
             return
+
+        if not (file_name.endswith(".pkl") or file_name.endswith(".csv")):
+            file_name += ".csv" if "csv" in selected_filter.lower() else ".pkl"
 
         # Save as pickle if file_name ends with .pkl
         if file_name.endswith(".pkl"):
