@@ -372,9 +372,13 @@ class CalibrationManager:
             self.event_calibration_layer().visible = True
         else:
             self._hide_generic_calibration_layers()
-            # Don't automatically hide the event layer:
-            # No harm in user having control over whether it is seen or not.
-            # self.event_calibration_layer().visible = False
+            # Same guard _hide_generic_calibration_layers() already uses on the other layers,
+            # and for the same reason - a redundant assignment still fires a real napari event,
+            # which can crash if it happens while an image is still mid-insertion (the exact
+            # class of bug fixed once already).
+            event_layer = self.event_calibration_layer()
+            if event_layer.visible != False:
+                event_layer.visible = False
 
     def clone_only_this_point_view_into_table(self, idx, name, generic_calibration_layer, delete=False):
         #Find point xy in pixels
@@ -436,9 +440,9 @@ class CalibrationManager:
 
 
         #print(f'BEFORE ADD, LABELS = {destination_layer.properties["labels"]}')
-        destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
         destination_layer.current_symbol = "disc"
         destination_layer.current_properties = {"labels": label}
+        destination_layer.add(fiducial_coords_4d_for_this_fiducial_in_view)
         #print(f'AFTER ADD, LABELS = {destination_layer.properties["labels"]}')
 
         destination_layer.text = destination_layer.text # Needed to get layer.text to become "aware" of property changes

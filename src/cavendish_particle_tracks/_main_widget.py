@@ -113,6 +113,8 @@ class ParticleTracksWidget(QWidget):
         self.show_decay_angles_checkbox = QCheckBox("Show decay angles")
         self.show_decay_angles_checkbox.setChecked(False)
         self.show_decay_angles_checkbox.setEnabled(False)
+        self.show_fiducials_checkbox = QCheckBox("Show fiducial markers")
+        self.show_fiducials_checkbox.setChecked(True)
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.image_calibration_button = QPushButton("Image Calibration")
         self.save_data_button = QPushButton("Save process table")
@@ -154,10 +156,11 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.particle_decays_menu, 1, 0)
             self.buttonbox.addWidget(self.delete_process, 1, 1)
             self.buttonbox.addWidget(self.save_data_button, 2, 0)
+            self.buttonbox.addWidget(self.show_all_processes_checkbox, 2, 1)
             self.buttonbox.addWidget(self.show_track_vertices_checkbox, 3, 0)
             self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
-            self.buttonbox.addWidget(self.show_all_processes_checkbox, 4, 0)
-            self.buttonbox.addWidget(self.show_decay_angles_checkbox, 4, 1)
+            self.buttonbox.addWidget(self.show_decay_angles_checkbox, 4, 0)
+            self.buttonbox.addWidget(self.show_fiducials_checkbox, 4, 1)
             #self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             self.buttonbox.addWidget(self.image_calibration_button, 0, 1)
             #self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
@@ -181,6 +184,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_origin_decay_checkbox)
             self.buttonbox.addWidget(self.show_all_processes_checkbox)
             self.buttonbox.addWidget(self.show_decay_angles_checkbox)
+            self.buttonbox.addWidget(self.show_fiducials_checkbox)
             self.buttonbox.addWidget(self.table)
             #self.buttonbox.addWidget(self.apply_magnification_button)
             #self.buttonbox.addWidget(self.stereoshift_button)
@@ -223,6 +227,14 @@ class ParticleTracksWidget(QWidget):
         self._last_synced_dims = None
         self.calibration_manager = CalibrationManager(self, self.viewer)
         self.viewer.dims.events.current_step.connect(self._sync_measurement_layer_to_selected_process)
+        # Connected here, not up where the checkbox was created, since calibration_manager doesn't
+        # exist yet at that point - connecting any earlier would crash the moment the checkbox's initial
+        # checked state gets set.
+        self.show_fiducials_checkbox.stateChanged.connect(
+            lambda _: self.calibration_manager.set_calibration_layer_visibility_and_focus(
+                self.show_fiducials_checkbox.isChecked(), False
+            )
+        )
 
     @property
     def camera_center(self):
@@ -283,6 +295,7 @@ class ParticleTracksWidget(QWidget):
         out.setSelectionMode(QAbstractItemView.SingleSelection)
         out.setEditTriggers(QAbstractItemView.NoEditTriggers)
         out.setSelectionBehavior(QTableWidget.SelectRows)
+        out.horizontalHeader().setDefaultSectionSize(140)
         return out
 
     def _set_table_visible_vars(self, calibrated) -> None:
@@ -303,6 +316,13 @@ class ParticleTracksWidget(QWidget):
 
         print("Column ", columntext, " not in the table")
         return -1
+
+    def _refresh_saved_vertices_cell(self, selected_row: int) -> None:
+        self.table.setItem(
+            selected_row,
+            self._get_table_column_index("saved_vertices"),
+            QTableWidgetItem(str(self.data[selected_row].saved_vertices)),
+        )
 
     def _on_row_selection_changed(self) -> None:
         """Enable/disable calculation buttons depending on the row selection, jump the
@@ -498,6 +518,7 @@ class ParticleTracksWidget(QWidget):
                 self._get_table_column_index("radius_px"),
                 QTableWidgetItem(str(view_data.radius_px)),
             )
+            self._refresh_saved_vertices_cell(selected_row)
 
         self._restyle_measurement_points()
         self._sync_other_processes_layer()
@@ -594,16 +615,9 @@ class ParticleTracksWidget(QWidget):
                 marker_char = VTX_NONE
             marker_char_pos = view + (0 if is_origin_vertex else 4)
 
-            old_saved_vertices = self.data[selected_row].saved_vertices
-            # replace char of old_saved_vertices at index marker_char_pos with marker_char:
-            new_saved_vertices = old_saved_vertices[:marker_char_pos] + marker_char + old_saved_vertices[marker_char_pos+1:]
-
-            self.data[selected_row].saved_vertices = new_saved_vertices
-            self.table.setItem(
-                selected_row,
-                self._get_table_column_index("saved_vertices"),
-                QTableWidgetItem(str(self.data[selected_row].saved_vertices)),
-            )
+            # saved_vertices is a computed property now (derived straight from self.views), not
+            # something this function writes to - just refresh the table cell to whatever it actually is.
+            self._refresh_saved_vertices_cell(selected_row)
 
             #print(f"put_xy_and_view_into_table will be using {x=} and {y=} when {xy=} as {delete=}")
 
@@ -677,6 +691,7 @@ class ParticleTracksWidget(QWidget):
             self._get_table_column_index("phi_pion"),
             QTableWidgetItem(str(view_data.phi_pion)),
         )
+        self._refresh_saved_vertices_cell(selected_row)
 
     def _load_decay_angle_diagram_for_selected_process(self) -> None:
         """Populate the diagram with whichever lines the selected process has saved for the current view,
@@ -796,6 +811,7 @@ class ParticleTracksWidget(QWidget):
             self._get_table_column_index("phi_pion"),
             QTableWidgetItem(str(view_data.phi_pion)),
         )
+        self._refresh_saved_vertices_cell(selected_row)
 
     def _on_decay_angle_layer_visibility_changed(self, event=None) -> None:
         """Keep the checkbox honest if the diagram's visibility changes some other way - e.g.
@@ -1180,6 +1196,7 @@ class ParticleTracksWidget(QWidget):
             self._get_table_column_index("radius_px"),
             QTableWidgetItem(str(view_data.radius_px)),
         )
+        self._refresh_saved_vertices_cell(selected_row)
         self._restyle_measurement_points()
 
     def _on_click_new_process(self) -> None:

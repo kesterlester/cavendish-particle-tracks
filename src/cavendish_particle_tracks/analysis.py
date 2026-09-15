@@ -25,6 +25,9 @@ FIDUCIAL_BACK = {
 VTX_NONE = "_"
 VTX_ORIGIN = "O"
 VTX_DECAY = "D"
+VTX_TRACK = "R"
+VTX_ANGLE = "A"
+VTX_NOT_APPLICABLE = "."
 
 # These are approximate locations for an interesting point in event XXXX and three pairs of fiducials in each view.
 debug_points_view_0_calibration_layer = np.array([[1241.8771528 , 4458.80208973],
@@ -297,7 +300,28 @@ class ParticleDecay:
     decay_v2_x: str = ""
     decay_v2_y: str = ""
 
-    saved_vertices: str = VTX_NONE + VTX_NONE + VTX_NONE + " " + VTX_NONE + VTX_NONE + VTX_NONE
+    @property
+    def saved_vertices(self) -> str:
+        """A quick-glance summary of what's actually been measured, computed fresh from self.views
+        every time rather than tracked separately - so it can never drift out of sync with the real
+        data the way a manually-updated field could. One 4-character block per view: O/D/T mark
+        whether origin/decay/a 3-point radius fit have been saved in that view; A marks whether decay
+        angles have been saved for the process as a whole. A '.' means that particular measurement
+        doesn't apply to this process type at all - only Lambda0 -> p + pi- has two charged daughters
+        to compare angles between, so every other process type shows '.' there.
+        """
+        angles_applicable = self.index == 4
+        blocks = []
+        for view in self.views:
+            origin_char = VTX_ORIGIN if view.origin is not None else VTX_NONE
+            decay_char = VTX_DECAY if view.decay is not None else VTX_NONE
+            track_char = VTX_TRACK if len(view.track_points) == 3 else VTX_NONE
+            if angles_applicable:
+                angle_char = VTX_ANGLE if view.phi_proton is not None else VTX_NONE
+            else:
+                angle_char = VTX_NOT_APPLICABLE
+            blocks.append(origin_char + decay_char + track_char + angle_char)
+        return " ".join(blocks)
 
     def vars_to_show(self, calibrated=False):
         return [
@@ -317,7 +341,7 @@ class ParticleDecay:
         """Variable to save in the output file, all for the moment"""
         vars_to_save = [var for var in self.__dict__ if var[0] != "_"]
         #vars_to_save += ["origin_vertex_depth_cm", "decay_vertex_depth_cm"]
-        vars_to_save += ["rpoints", "dpoints"]
+        vars_to_save += ["rpoints", "dpoints", "saved_vertices"]
         # vars_to_save += ["origin_v0_x"]
         # vars_to_save += ["origin_v0_y"]
         # vars_to_save += ["origin_v1_x"]
