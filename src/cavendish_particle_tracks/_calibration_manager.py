@@ -20,7 +20,7 @@ from qtpy.QtWidgets import (
 from qtpy.QtGui import QCursor, QMouseEvent
 from qtpy.QtCore import Qt, QEvent, QTimer, QPoint
 
-from .analysis import VIEW_NAMES
+from .analysis import VIEW_NAMES, CalibrationData, FIDUCIAL_NAMES
 from .napari_tools import (
     make_move_only,
     overwrite_layer,
@@ -79,8 +79,9 @@ class CalibrationManager:
 
         self.parent = parent
         self.viewer = viewer
+        self.calibration_data = CalibrationData()
 
-        self.event_calibration_layer() # Makes this layer and puts it earlier in the layer list than the next guys:
+        self.event_calibration_layer()  # Makes this layer and puts it earlier in the layer list than the next guys:
         # TODO: Try to avoid re-storing this redundant list of generic calibration layers .... should to live only in viewer?
         self._generic_calibration_layers = self._setup_calibration_layers()  # Returns a list of napari point layers.
 
@@ -144,11 +145,35 @@ class CalibrationManager:
         }
         return layer
 
+    def _sync_generic_template_from_layer(self, view_index) -> None:
+        """Mirror one generic calibration layer's current fiducial positions into
+        self.calibration_data - a full resync from the layer's own .data/.properties rather
+        than surgically patching just the point that changed, since there are at most a dozen
+        fiducials per view and a full resync is cheap. Points that aren't real fiducials yet
+        (still blank, or the vestigial 'origin'/'decay' calibration points) are simply skipped,
+        since FIDUCIAL_NAMES doesn't include them.
+        """
+        layer = self.generic_calibration_layers()[view_index]
+        template = self.calibration_data.generic_templates[view_index]
+        labels = layer.properties.get("labels", [])
+        for i, point in enumerate(layer.data):
+            if i >= len(labels):
+                continue
+            name = labels[i]
+            if name in FIDUCIAL_NAMES:
+                template.set_position(name, [float(point[0]), float(point[1])])
+
     def _setup_callbacks(self):
-        for layer in self.generic_calibration_layers():
+        for view_index, layer in enumerate(self.generic_calibration_layers()):
             # This is the callback to allow right-click on generic fiducials:
             layer.mouse_drag_callbacks.append(self.on_mouse)
             make_move_only(layer)
+            # Dragging a fiducial is one of the two ways its position can change - the
+            # other is being freshly labelled, handled separately at the end of rename_point()
+            # below, since labelling alone doesn't fire this event.
+            layer.events.data.connect(
+                lambda event, v=view_index: self._sync_generic_template_from_layer(v)
+            )
 
         # This is the thing that changes which fiducials are visible when the view slider is slid:
         self.viewer.dims.events.current_step.connect(self.callback_calibration_layer_visibility)
@@ -483,13 +508,22 @@ class CalibrationManager:
             other_name = name + "'"
 
         for layer in self.generic_calibration_layers():
-            # print(f"before alteration {layer.text}")
-            #layer.text.values[idx] = name  # This change is needed for display purposes.
             layer.properties["labels"][idx] = name  # This change is needed for saving purposes.
-            # print(f"after  alteration {layer.text}")
             if other_idx is not None and other_name is not None:
-                #layer.text.values[other_idx] = other_name  # This change is needed for display purposes.
                 layer.properties["labels"][other_idx] = other_name  # This change is needed for saving purposes.
+            # Mutating properties in place like this doesn't trigger napari's own redraw. The
+            # "reassign text to itself" trick used elsewhere in this file only seems to reliably
+            # force an immediate redraw for whichever layer is currently active, not merely
+            # visible - explicitly calling refresh() is the more forceful mechanism we already
+            # confirmed works reliably elsewhere in this codebase.
+            layer.text = layer.text
+            layer.refresh()
+
+        # This direct array mutation doesn't fire any napari event on its own, unlike a drag - so
+        # a fresh label would otherwise never reach self.calibration_data until/unless the same
+        # point later also happens to be dragged. Sync explicitly here instead.
+        for view_index in range(len(self.generic_calibration_layers())):
+            self._sync_generic_template_from_layer(view_index)
 
             layer.text = layer.text  # necessary so that layer.text becomes "aware" of the changes we made to layer.properties
             layer.refresh() # render changes to screen

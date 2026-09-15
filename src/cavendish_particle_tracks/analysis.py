@@ -22,6 +22,78 @@ FIDUCIAL_BACK = {
     "A": [-15.00, 8.68],
 }  # cm
 
+FIDUCIAL_NAMES = frozenset(FIDUCIAL_FRONT) | frozenset(FIDUCIAL_BACK)
+
+
+@dataclass
+class GenericFiducialTemplate:
+    """The reusable template fiducial positions for one camera view - dragged into place
+    once during general calibration, shared across every event, used as the starting point
+    before cloning a fiducial into a specific photo's own FiducialViewData.
+    """
+
+    positions: dict = field(default_factory=dict)
+
+    def set_position(self, name: str, xy: list) -> None:
+        if name not in FIDUCIAL_NAMES:
+            raise ValueError(f"{name!r} is not a recognised fiducial name")
+        self.positions[name] = xy
+
+    def get_position(self, name: str):
+        return self.positions.get(name)
+
+
+@dataclass
+class FiducialViewData:
+    """Calibration fiducial stamps for one camera view, for one specific event - the counterpart
+    to ViewData, but holding an arbitrary named set of fiducials rather than a fixed origin/decay/track
+    shape, since a photo can have anywhere from zero to all twelve stamped for it.
+    """
+
+    stamped: dict = field(default_factory=dict)
+
+    def stamp(self, name: str, xy: list) -> None:
+        if name not in FIDUCIAL_NAMES:
+            raise ValueError(f"{name!r} is not a recognised fiducial name")
+        self.stamped[name] = xy
+
+    def unstamp(self, name: str) -> None:
+        self.stamped.pop(name, None)
+
+    def get(self, name: str):
+        return self.stamped.get(name)
+
+
+@dataclass
+class CalibrationData:
+    """All calibration fiducial data for one loaded dataset: one generic (event-independent)
+    template per camera view, plus one FiducialViewData per (event, view) combination, created
+    the first time something is actually stamped there.
+    """
+
+    generic_templates: list = field(
+        default_factory=lambda: [GenericFiducialTemplate() for _ in range(3)]
+    )
+    event_views: dict = field(default_factory=dict)
+
+    def stamp(self, event: int, view: int, name: str, xy: list) -> None:
+        key = (event, view)
+        if key not in self.event_views:
+            self.event_views[key] = FiducialViewData()
+        self.event_views[key].stamp(name, xy)
+
+    def unstamp(self, event: int, view: int, name: str) -> None:
+        key = (event, view)
+        if key in self.event_views:
+            self.event_views[key].unstamp(name)
+
+    def get_stamp(self, event: int, view: int, name: str):
+        key = (event, view)
+        if key not in self.event_views:
+            return None
+        return self.event_views[key].get(name)
+
+
 VTX_NONE = "_"
 VTX_ORIGIN = "O"
 VTX_DECAY = "D"
