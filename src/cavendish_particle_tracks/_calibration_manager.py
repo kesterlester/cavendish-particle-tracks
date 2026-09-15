@@ -312,25 +312,6 @@ class CalibrationManager:
             if event_layer.visible != False:
                 event_layer.visible = False
 
-    def clone_only_this_point_view_into_table(self, idx, name, generic_calibration_layer, delete=False):
-        #Find point xy in pixels
-        xy = generic_calibration_layer.data[idx]
-
-        # Find view from generic_calibration_layer:
-        view = [l.name for l in self.generic_calibration_layers()].index(
-            generic_calibration_layer.name)  # names are unique
-        print(f"Clone thinks point has {view=} and {xy=}.")
-
-        if name == "origin":
-            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=True, delete=delete)
-        elif name == "decay":
-            self.parent.put_xy_and_view_into_table(xy, view, is_origin_vertex=False, delete=delete)
-        else:
-            if delete:
-                napari.utils.notifications.show_error('Label the point as either "origin" or "decay" before using it to delete data from the table!')
-            else:
-                napari.utils.notifications.show_error('Label the point as either "origin" or "decay" before inserting into table!')
-
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
         #print(f"About to clone generic fiducial {idx=} with {name=}")
         destination_layer = self.event_calibration_layer()
@@ -399,11 +380,6 @@ class CalibrationManager:
         #print(f"About to clone generic fiducial {idx=} with {name=} into event.")
         for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
             self.clone_only_this_fid_view_into_event(idx, name, generic_calibration_layer)
-
-    def clone_all_views_of_this_point_into_table(self, idx, name, delete=False):
-        # print(f"About to clone generic fiducial {idx=} with {name=} into event.")
-        for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
-            self.clone_only_this_point_view_into_table(idx, name, generic_calibration_layer, delete=delete)
 
     def rename_point(self, idx, name, type):
         # print(f"Renaming point idx={idx} to name={name}")
@@ -610,58 +586,6 @@ After event.type='mouse_release' event.button=2
                 act.triggered.connect(lambda _, f=fname: self.rename_point(i, f, type))
                 menu.addAction(act)
 
-            if not type_is_fiducial:
-                # "no name" entry
-                #noname = QAction(f"❌ Delete {THING}", menu)
-                #noname.triggered.connect(lambda _: self.rename_point(i, "", type))
-                #menu.addAction(noname)
-
-                # custom name entry
-                def custom_name_calback():
-                    text, ok = QInputDialog.getText(
-                        self.viewer.window._qt_window,
-                        f"Custom {THING}",
-                        f"Enter {THING}:",
-                    )
-                    if ok and text.strip():
-                        self.rename_point(i, text.strip(), type)
-
-                menu.addSeparator()
-                custom_name_menu_item = QAction(f"Set custom {THING} ...", menu)
-                custom_name_menu_item.triggered.connect(custom_name_calback)
-                menu.addAction(custom_name_menu_item)
-
-                menu.addSeparator()
-
-                if name=="origin" or name=="decay":
-
-                    clone_into_current_process_menu_item = QAction(f"Save (for THIS VIEW ONLY) coords of {name} vertex to current process in table...", menu)
-                    clone_into_current_process_menu_item.triggered.connect(
-                        lambda _: self.clone_only_this_point_view_into_table(i, name, layer))
-                    menu.addAction(clone_into_current_process_menu_item)
-
-                    clone_into_current_process_menu_item = QAction(f"Save (for ALL VIEWS) coords of {name} vertex to current process in table...",
-                                                             menu)
-                    clone_into_current_process_menu_item.triggered.connect(
-                        lambda _: self.clone_all_views_of_this_point_into_table(i, name))
-                    menu.addAction(clone_into_current_process_menu_item)
-
-                    menu.addSeparator()
-
-                    clone_into_current_process_menu_item = QAction(
-                        f"Delete (for THIS VIEW ONLY) coords of {name} vertex from current process in table...", menu)
-                    clone_into_current_process_menu_item.triggered.connect(
-                        lambda _: self.clone_only_this_point_view_into_table(i, name, layer, delete=True))
-                    menu.addAction(clone_into_current_process_menu_item)
-
-                    clone_into_current_process_menu_item = QAction(
-                        f"Delete (for ALL VIEWS) coords of {name} vertex from current process in table...",
-                        menu)
-                    clone_into_current_process_menu_item.triggered.connect(
-                        lambda _: self.clone_all_views_of_this_point_into_table(i, name, delete=True))
-                    menu.addAction(clone_into_current_process_menu_item)
-
-
             if type_is_fiducial:
                 menu.addSeparator()
                 clone_into_current_image_menu_item = QAction("Insert ONLY THIS VIEW of this fiducial into current event ...", menu)
@@ -690,17 +614,25 @@ After event.type='mouse_release' event.button=2
         origin_x = 0.5 * TYPICAL_IMAGE_SHORT_SIZE_PIX  # actually how far DOWN !!
         spread_x = 0.15 * TYPICAL_IMAGE_SHORT_SIZE_PIX  # actually vertical spread !!
 
-        point_origin_y = 0.25 * TYPICAL_IMAGE_LONG_SIZE_PIX  # actually how far ACROSS !!
-        fid_origin_y = 0.5 * TYPICAL_IMAGE_LONG_SIZE_PIX
         fid_step_y = 0.12 * TYPICAL_IMAGE_LONG_SIZE_PIX
+        # Centre the whole span of fiducial pairs on the image's middle, rather than starting AT
+        # the middle and spreading downward from there - that offset used to leave room above for
+        # the now-removed origin/decay points, which no longer applies. Computed from the actual
+        # pair count so it stays correct if that number is ever changed.
+        fid_origin_y = (
+                0.5 * TYPICAL_IMAGE_LONG_SIZE_PIX
+                - 0.5 * (CalibrationManager.num_generic_front_back_fid_pairs - 1) * fid_step_y
+        )
 
-        # First position the point being measured:
-        labels = ["origin", "decay", ]
-        symbols = ["disc", "disc", ]
-        colours = ["cyan", "cyan", ]
-        types = ["point", "point"]
-        points_in_generic_view = [[origin_x, point_origin_y - 0.5 * fid_step_y, ],
-                                  [origin_x, point_origin_y + 0.5 * fid_step_y, ], ]
+        # Front/Back fiducial pairs (the old "origin"/"decay" measurement points that used to
+        # live here are gone - vestigial since Step 4 moved live origin/decay/track measurement
+        # onto the "Radii and Lengths" layer; the menu actions and table-cloning methods that
+        # only ever applied to them have been removed too):
+        labels = []
+        symbols = []
+        colours = []
+        types = []
+        points_in_generic_view = []
 
         # Now position the Front/Back fiducial pairs:
         for i in range(CalibrationManager.num_generic_front_back_fid_pairs):

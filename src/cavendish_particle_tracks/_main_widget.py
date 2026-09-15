@@ -7,6 +7,7 @@ for further analysis.
 """
 
 import glob
+import os
 import pickle
 import warnings
 
@@ -34,7 +35,7 @@ from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, VTX_ORIGIN, VTX_DECAY, VTX_NONE
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession
 
 ENABLE_MAG = False
 
@@ -622,70 +623,7 @@ class ParticleTracksWidget(QWidget):
                 return False
         return True
 
-    def put_xy_and_view_into_table(self,
-                                    xy,
-                                    view,
-                                    is_origin_vertex : bool, # False implies is_decay_vertex
-                                    delete = False,
-                                    ):
-        try:
-            selected_row = self._get_selected_row()
-        except IndexError:
-            napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
-            return
-        else:
-            if isinstance(self.data[selected_row], CalibrationRow):
-                napari.utils.notifications.show_error(
-                    "Select a real process (not a calibration row) before cloning a vertex into the table."
-                )
-                return
-            if delete:
-                napari.utils.notifications.show_info(
-                    f"Deleting coords {xy} from row {selected_row+1} of table for view {view}.")
-            else:
-                napari.utils.notifications.show_info(
-                    f"Adding coords {xy} to row {selected_row+1} of table for view {view}.")
-
-            if not delete:
-                x, y = xy
-                # Next two lines break a numpy link. Just seems sensible to do.
-                x = float(x)
-                y = float(y)
-                marker_char = VTX_ORIGIN if is_origin_vertex else VTX_DECAY
-            else:
-                x, y = "", ""
-                marker_char = VTX_NONE
-            marker_char_pos = view + (0 if is_origin_vertex else 4)
-
-            # saved_vertices is a computed property now (derived straight from self.views), not
-            # something this function writes to - just refresh the table cell to whatever it actually is.
-            self._refresh_saved_vertices_cell(selected_row)
-
-            #print(f"put_xy_and_view_into_table will be using {x=} and {y=} when {xy=} as {delete=}")
-
-            if is_origin_vertex:
-                if view == 0:
-                    self.data[selected_row].origin_v0_x = x
-                    self.data[selected_row].origin_v0_y = y
-                if view == 1:
-                    self.data[selected_row].origin_v1_x = x
-                    self.data[selected_row].origin_v1_y = y
-                if view == 2:
-                    self.data[selected_row].origin_v2_x = x
-                    self.data[selected_row].origin_v2_y = y
-            else: # decay vertex
-                if view == 0:
-                    self.data[selected_row].decay_v0_x = x
-                    self.data[selected_row].decay_v0_y = y
-                if view == 1:
-                    self.data[selected_row].decay_v1_x = x
-                    self.data[selected_row].decay_v1_y = y
-                if view == 2:
-                    self.data[selected_row].decay_v2_x = x
-                    self.data[selected_row].decay_v2_y = y
-
     # _on_click_radius() and _on_click_length() used to live here - now removed that selecting
-    # points auto-calculates both live (see _on_measurement_points_changed in _setup_measurement_layer).
 
     def _default_decay_angle_lines(self) -> list:
         """The same starting position the diagram has always used, pulled out so both first-time
@@ -953,7 +891,7 @@ class ParticleTracksWidget(QWidget):
         if file_name in {"", None}:
             return
 
-        if not file_name.endswith(".pkl"):
+        if os.path.splitext(file_name)[1] == "":
             file_name += ".pkl"
 
         try:
@@ -1490,7 +1428,10 @@ class ParticleTracksWidget(QWidget):
         if file_name in {"", None}:
             return
 
-        if not (file_name.endswith(".pkl") or file_name.endswith(".csv")):
+        # Only fill in a missing extension - an explicitly wrong one (e.g. someone typing "myfile.pdf")
+        # should still fall through to the "invalid file type" branch below, not get silently coerced
+        # into a valid extension.
+        if os.path.splitext(file_name)[1] == "":
             file_name += ".csv" if "csv" in selected_filter.lower() else ".pkl"
 
         # Save as pickle if file_name ends with .pkl
