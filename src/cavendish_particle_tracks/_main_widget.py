@@ -550,10 +550,14 @@ class ParticleTracksWidget(QWidget):
         try:
             selected_row = self._get_selected_row()
             self.save_data_button.setEnabled(True)
-            self.delete_process.setEnabled(True)
+            # Deleting a calibration row here would be misleading - it'd only remove the table's
+            # view of it, not the actual stamps still sitting in calibration_manager.calibration_data.
+            # The next stamp/delete anywhere would just silently rebuild the row right back. Real
+            # deletion already works correctly via the per-image layer's own delete tool instead.
+            self.delete_process.setEnabled(not isinstance(self.data[selected_row], CalibrationRow))
             ## think about these two + cal once done.
             self.image_calibration_button.setEnabled(True)
-            #self.stereoshift_button.setEnabled(True)
+            # self.stereoshift_button.setEnabled(True)
             if self.data[selected_row].index == 4:
                 self.show_decay_angles_checkbox.setEnabled(True)
             else:
@@ -1326,6 +1330,11 @@ class ParticleTracksWidget(QWidget):
         print(self.data[-1])
         self.particle_decays_menu.setCurrentIndex(0)
 
+        # Adding a process is a strong signal you're about to place radius/length points - hand
+        # focus back to that layer, in case you were last working in a calibration layer.
+        if MEASUREMENTS_LAYER_NAME in self.viewer.layers:
+            self.viewer.layers.selection.active = self.layer_measurements
+
     def _on_click_delete_process(self) -> None:
         """Delete particle from table and data"""
         try:
@@ -1334,6 +1343,11 @@ class ParticleTracksWidget(QWidget):
             napari.utils.notifications.show_error("The table of processes is empty so no process can be deleted.")
             return
         else:
+            if isinstance(self.data[selected_row], CalibrationRow):
+                napari.utils.notifications.show_error(
+                    "Calibration rows can't be deleted here - delete the individual fiducial stamps on the per-image layer instead."
+                )
+                return
             confirmation_dialog = QMessageBox()
             confirmation_dialog.setText("Deleting selected particle")
             confirmation_dialog.setInformativeText("Do you want to continue?")
