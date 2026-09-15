@@ -35,7 +35,7 @@ from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, VTX_ORIGIN, VTX_DECAY, VTX_NONE
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, VTX_ORIGIN, VTX_DECAY, VTX_NONE
 
 ENABLE_MAG = False
 
@@ -280,6 +280,20 @@ class ParticleTracksWidget(QWidget):
         rows = select.selectedRows()
         return rows[0].row()
 
+    def _get_selected_measurement_row(self):
+        """Like _get_selected_row(), but returns None for both "nothing selected" and
+        "a calibration row is selected" - a CalibrationRow's views hold FiducialViewData,
+        not ViewData, so code built around origin/decay/track measurements should treat
+        selecting one the same as selecting nothing, rather than crash on the shape mismatch.
+        """
+        try:
+            selected_row = self._get_selected_row()
+        except IndexError:
+            return None
+        if isinstance(self.data[selected_row], CalibrationRow):
+            return None
+        return selected_row
+
     def _set_up_table(self) -> QTableWidget:
         """Initial setup of the QTableWidget with one row and columns for each
         point and the calculated radius.
@@ -370,10 +384,7 @@ class ParticleTracksWidget(QWidget):
 
         length_points = []
         radius_points = []
-        try:
-            selected_row = self._get_selected_row()
-        except IndexError:
-            selected_row = None
+        selected_row = self._get_selected_measurement_row()
 
         if selected_row is not None:
             current_view = self.viewer.dims.current_step[0]
@@ -489,7 +500,9 @@ class ParticleTracksWidget(QWidget):
 
         new_points = []
         view_data = None
-        if selected_row is not None:
+        # Calibration rows have nothing to put on this layer - their fiducial stamps live on a
+        # completely separate layer, managed by CalibrationManager instead of ParticleDecay.views.
+        if selected_row is not None and not isinstance(self.data[selected_row], CalibrationRow):
             view_data = self.data[selected_row].views[current_view]
             for point in (view_data.origin, view_data.decay, *view_data.track_points):
                 if point is not None:
@@ -507,7 +520,7 @@ class ParticleTracksWidget(QWidget):
             self._syncing = False
         self._last_synced_dims = (current_view, current_event)
 
-        if selected_row is not None:
+        if view_data is not None:
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("decay_length_px"),
@@ -518,6 +531,7 @@ class ParticleTracksWidget(QWidget):
                 self._get_table_column_index("radius_px"),
                 QTableWidgetItem(str(view_data.radius_px)),
             )
+        if selected_row is not None:
             self._refresh_saved_vertices_cell(selected_row)
 
         self._restyle_measurement_points()
@@ -597,6 +611,11 @@ class ParticleTracksWidget(QWidget):
             napari.utils.notifications.show_error("The table of processes is empty. Create a process first.")
             return
         else:
+            if isinstance(self.data[selected_row], CalibrationRow):
+                napari.utils.notifications.show_error(
+                    "Select a real process (not a calibration row) before cloning a vertex into the table."
+                )
+                return
             if delete:
                 napari.utils.notifications.show_info(
                     f"Deleting coords {xy} from row {selected_row+1} of table for view {view}.")
@@ -1080,6 +1099,8 @@ class ParticleTracksWidget(QWidget):
         for i, particle in enumerate(self.data):
             if i == selected_row:
                 continue
+            if isinstance(particle, CalibrationRow):
+                continue
             if particle.event_number != current_event:
                 continue
             view_data = particle.views[current_view]
@@ -1135,9 +1156,8 @@ class ParticleTracksWidget(QWidget):
             # and fix this properly.
             return
 
-        try:
-            selected_row = self._get_selected_row()
-        except IndexError:
+        selected_row = self._get_selected_measurement_row()
+        if selected_row is None:
             return
 
         current_view = self.viewer.dims.current_step[0]
@@ -1198,6 +1218,56 @@ class ParticleTracksWidget(QWidget):
         )
         self._refresh_saved_vertices_cell(selected_row)
         self._restyle_measurement_points()
+
+    def _sync_calibration_rows_into_table(self) -> None:
+        """Create or update a CalibrationRow (and its table row) for every event that has
+        at least one fiducial stamped, mirroring calibration_manager.calibration_data.event_views.
+        Called by CalibrationManager itself whenever a stamp is added or removed. New rows are not
+        auto-selected the way a new process is - there's nothing else that needs to happen beyond
+        the row simply appearing.
+        """
+        event_views = self.calibration_manager.calibration_data.event_views
+        events_with_stamps = sorted({event for (event, view) in event_views})
+
+        # An event that already has a row but has since had every stamp deleted no longer appears in
+        # events_with_stamps at all (that dict is fully rebuilt from scratch each sync) - without this,
+        # its row would just be silently skipped forever instead of being reset to show it's now empty.
+        existing_calibration_events = {
+            row.event_number for row in self.data if isinstance(row, CalibrationRow)
+        }
+        events_to_refresh = sorted(existing_calibration_events | set(events_with_stamps))
+
+        for event_number in events_to_refresh:
+            views = [FiducialViewData(), FiducialViewData(), FiducialViewData()]
+            for view_index in range(3):
+                stamped_view = event_views.get((event_number, view_index))
+                if stamped_view is not None:
+                    views[view_index] = stamped_view
+
+            existing_row_index = None
+            for i, row in enumerate(self.data):
+                if isinstance(row, CalibrationRow) and row.event_number == event_number:
+                    existing_row_index = i
+                    break
+
+            if existing_row_index is not None:
+                self.data[existing_row_index].views = views
+                self._refresh_saved_vertices_cell(existing_row_index)
+            else:
+                new_row = CalibrationRow(event_number=event_number, views=views)
+                self.data.append(new_row)
+                self.table.insertRow(self.table.rowCount())
+                row_index = self.table.rowCount() - 1
+                self.table.setItem(
+                    row_index, self._get_table_column_index("index"), QTableWidgetItem(str(new_row.index))
+                )
+                self.table.setItem(
+                    row_index, self._get_table_column_index("name"), QTableWidgetItem(new_row.name)
+                )
+                self.table.setItem(
+                    row_index, self._get_table_column_index("event_number"), QTableWidgetItem(str(new_row.event_number))
+                )
+                self._refresh_saved_vertices_cell(row_index)
 
     def _on_click_new_process(self) -> None:
         """When the 'New process' button is clicked, append a new blank row to

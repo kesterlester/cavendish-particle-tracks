@@ -168,6 +168,7 @@ class CalibrationManager:
             evt = int(point[1])
             xy = [float(point[2]), float(point[3])]
             self.calibration_data.stamp(evt, view, name, xy)
+        self.parent._sync_calibration_rows_into_table()
 
         print("event_views now:", self.calibration_data.event_views)
 
@@ -504,6 +505,11 @@ class CalibrationManager:
         destination_layer.data = new_data
         destination_layer.properties = {"labels": np.array(new_labels, dtype=object)}
         destination_layer.current_symbol = "disc"
+        # events.data fires the instant .data is assigned above, before the .properties line
+        # even runs - so our connected sync callback would see the new point with a still-stale
+        # labels array, skip it, and only pick it up on the NEXT stamp. Call it again explicitly,
+        # now that both assignments are actually done, to guarantee correctness.
+        self._sync_calibration_data_from_event_layer()
 
         destination_layer.text = destination_layer.text # Needed to get layer.text to become "aware" of property changes
         self.refresh_symbol_sizes()

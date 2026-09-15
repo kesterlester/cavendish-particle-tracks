@@ -490,3 +490,55 @@ class ParticleDecay:
             else:
                 mystring += str(getattr(self, var)) + ","
         return mystring[0:-1] + "\n"
+
+@dataclass
+class CalibrationRow:
+    """One event's calibration fiducial stamps, represented so it can sit alongside
+    ParticleDecay rows in the same process table and the same saved CSV - this is
+    calibration data for an event, not a decay measurement. index=-1 marks it as
+    "not a real process type" (real EXPECTED_PROCESSES indices are 1-5), which
+    existing index-based checks already fail harmlessly against without needing to
+    know CalibrationRow exists.
+    """
+
+    name: str = "Calibration"
+    index: int = -1
+    event_number: int = -1
+    views: list = field(
+        default_factory=lambda: [FiducialViewData(), FiducialViewData(), FiducialViewData()]
+    )
+
+    @property
+    def saved_vertices(self) -> str:
+        """Same visual language as ParticleDecay.saved_vertices - one
+        space-separated block per view - but each block lists the actual
+        fiducial names stamped in that view (joined with '+', not ',',
+        to avoid raw commas breaking the naive CSV writer below) rather
+        than O/D/R/A flags, since that's what's meaningful here.
+        """
+        blocks = []
+        for view in self.views:
+            names = sorted(view.stamped.keys())
+            blocks.append("/".join(names) if names else VTX_NONE)
+        return " ".join(blocks)
+
+    def vars_to_save(self):
+        # Deliberately mirrors ParticleDecay's own column list exactly, asked for fresh
+        # each time rather than duplicated by hand - the save code writes the CSV header
+        # from only the first row, then trusts every other row's to_csv() to line up with
+        # it, so this has to match exactly or a calibration row would silently misalign
+        # every column after it.
+        return ParticleDecay().vars_to_save()
+
+    def to_csv(self) -> str:
+        values = []
+        for column in self.vars_to_save():
+            if column == "name":
+                values.append(self.name)
+            elif column == "event_number":
+                values.append(str(self.event_number))
+            elif column == "saved_vertices":
+                values.append(self.saved_vertices)
+            else:
+                values.append("")
+        return ",".join(values) + "\n"
