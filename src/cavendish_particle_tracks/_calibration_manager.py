@@ -40,7 +40,7 @@ locations for the latter before the latter are committed or tweaked.
 """
 
 view_indices = (0, 1, 2)
-GENERIC_CALIBRATION_LAYER_NAMES = [f"Calibration (generic; camera {v + 1})" for v in view_indices]
+GENERIC_CALIBRATION_LAYER_NAME = "Calibration (generic)"
 PER_IMAGE_CALIBRATION_LAYER_NAME = "Calibration (per-image)"
 
 class CalibrationManager:
@@ -71,6 +71,25 @@ class CalibrationManager:
 
         # Lastly, setup callbacks:
         self._setup_callbacks()
+
+    def _setup_calibration_layers(self):
+        layers = self._default_generic_calibration_layers()
+
+        # Overwrite data if layer already exists, otherwise make a note of new layers
+        new_layers = []
+        for layer in layers:
+            if layer.name in self.viewer.layers:
+                # Existing layer, so callbacks already exist too, so just overwrite old layer data:
+                overwrite_layer(self.viewer.layers[layer.name], layer)
+            else:
+                # New layer!
+                new_layers.append(layer)
+
+        # Tell Napari about any new generic calibration layers:
+        for new_layer in new_layers:
+            self.viewer.add_layer(new_layer)
+
+        return new_layers
 
     def mark_clean(self):
         import copy
@@ -149,48 +168,93 @@ class CalibrationManager:
 
         print("event_views now:", self.calibration_data.event_views)
 
-    def _sync_generic_template_from_layer(self, view_index) -> None:
-        """Mirror one generic calibration layer's current fiducial positions into
-        self.calibration_data - a full resync from the layer's own .data/.properties rather
-        than surgically patching just the point that changed, since there are at most a dozen
-        fiducials per view and a full resync is cheap. Points that aren't real fiducials yet
-        (still blank, or the vestigial 'origin'/'decay' calibration points) are simply skipped,
-        since FIDUCIAL_NAMES doesn't include them.
-        """
-        layer = self.generic_calibration_layers()[view_index]
-        template = self.calibration_data.generic_templates[view_index]
-        # Reset first, not just add/overwrite - otherwise a fiducial that gets relabelled (e.g.
-        # fixing a mis-click) leaves its OLD name behind forever, frozen at its old position,
-        # looking like a third real fiducial that never actually existed. Confirmed directly: two
-        # relabels produced three saved names sharing duplicate coordinates.
-        template.positions = {}
-        template.slot_indices = {}
-        labels = layer.properties.get("labels", [])
-        for i, point in enumerate(layer.data):
-            if i >= len(labels):
-                continue
-            name = labels[i]
-            if name in FIDUCIAL_NAMES:
-                template.set_position(name, [float(point[0]), float(point[1])], slot_index=i)
-        self.parent.set_button_availability()
-
     def _setup_callbacks(self):
-        for view_index, layer in enumerate(self.generic_calibration_layers()):
+        for layer in self.generic_calibration_layers():
             # This is the callback to allow right-click on generic fiducials:
             layer.mouse_drag_callbacks.append(self.on_mouse)
             make_move_only(layer)
-            # Dragging a fiducial is one of the two ways its position can change - the
-            # other is being freshly labelled, handled separately at the end of rename_point()
-            # below, since labelling alone doesn't fire this event.
-            layer.events.data.connect(
-                lambda event, v=view_index: self._sync_generic_template_from_layer(v)
-            )
+            # Keep every event's duplicate row of a dragged fiducial in sync with each other -
+            # generic templates are event-independent by design (same physical mark regardless of
+            # which photo you're looking at), but view-independent they are NOT (each camera
+            # calibrates separately), so this only ever propagates within the same view.
+            # Order matters: propagation must run first so every event's row is updated before
+            # sync reads the event_index=0 representative row - otherwise a drag made while
+            # viewing a non-zero event would sync a stale, not-yet-propagated position.
+            layer.events.data.connect(self._propagate_generic_drag_across_events)
+            layer.events.data.connect(self._sync_generic_template_from_layer)
 
         # This is the thing that changes which fiducials are visible when the view slider is slid:
         self.viewer.dims.events.current_step.connect(self.callback_calibration_layer_visibility)
 
         # symbol size management
         self.viewer.camera.events.zoom.connect(self.callback_symbol_size)
+
+    def _num_events_on_generic_layer(self, layer) -> int:
+        # 18 = 3 views * 6 slots, fixed by construction (see _generic_layer_row_index) - the
+        # layer always holds exactly that many rows per event, so this is an exact division.
+        return len(layer.data) // 18
+
+    def _propagate_generic_drag_across_events(self, event=None) -> None:
+        """When a generic fiducial is dragged, apply its new position to that same (view, slot)
+        fiducial's duplicate row in every OTHER event, but not to any other view - each camera
+        calibrates independently. Does not touch calibration_data (see the note in _setup_callbacks
+        - that sync is fixed properly in 12-2c).
+        """
+        if event is None or event.action != "changed":
+            return
+        if getattr(self, "_propagating_generic_drag", False):
+            return  # the .data reassignment below would otherwise re-trigger this same callback
+
+        layer = self.generic_calibration_layers()[0]
+        num_events = self._num_events_on_generic_layer(layer)
+        if num_events <= 1:
+            return  # nothing else to propagate to
+
+        self._propagating_generic_drag = True
+        try:
+            data = layer.data
+            for idx in event.data_indices:
+                view, slot, event_index = self._generic_layer_view_slot_event(idx, num_events)
+                new_y, new_x = data[idx][2], data[idx][3]
+                for other_event_index in range(num_events):
+                    if other_event_index == event_index:
+                        continue
+                    other_row = self._generic_layer_row_index(view, slot, other_event_index, num_events)
+                    data[other_row][2] = new_y
+                    data[other_row][3] = new_x
+            layer.data = data
+        finally:
+            self._propagating_generic_drag = False
+
+    def _sync_generic_template_from_layer(self, event=None) -> None:
+        """Mirror the merged generic calibration layer's current fiducial positions into
+        self.calibration_data - a full resync from the layer's own .data/.properties, not
+        a surgical per-point patch, matching every other calibration sync in this file. Only the
+        event_index=0 duplicate row of each (view, slot) is read - drag propagation keeps every
+        event's copy identical, so any one representative row is sufficient, and generic_templates
+        itself has no per-event concept at all.
+        """
+        layer = self.generic_calibration_layers()[0]
+        num_events = self._num_events_on_generic_layer(layer)
+        if num_events == 0:
+            return
+
+        for template in self.calibration_data.generic_templates:
+            template.positions = {}
+            template.slot_indices = {}
+
+        labels = layer.properties.get("labels", [])
+        data = layer.data
+        for view in range(3):
+            template = self.calibration_data.generic_templates[view]
+            for slot in range(6):
+                row = self._generic_layer_row_index(view, slot, 0, num_events)
+                if row >= len(labels):
+                    continue
+                name = labels[row]
+                if name in FIDUCIAL_NAMES:
+                    y, x = data[row][2], data[row][3]
+                    template.set_position(name, [float(y), float(x)], slot_index=slot)
 
     # TODO: could make generic_calibration_layers subservient to generic_calibration_layer_names instead of current way round.
     def generic_calibration_layer_names(self):
@@ -283,25 +347,28 @@ class CalibrationManager:
                 layer.visible = False
 
     # Make the correct calibration layers visible/invisible based on the view slider:
+    # Show/activate the (single, merged) generic calibration layer. Per-view switching is no
+    # longer needed here at all - the layer's own per-point [view, event, y, x] coordinates
+    # already make napari's normal dims-slicing show exactly the right 6 markers for whichever
+    # view/event is current, the same way every other 4D layer in this plugin already works.
     def _show_and_activate_correct_generic_calibration_layer(self):
-        current_view = self.viewer.dims.current_step[0]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
+        layer = self.generic_calibration_layers()[0]
 
-        for i, layer in enumerate(self.generic_calibration_layers()):
-            # Make the current view active if so requested:
-            if self._calibration_layer_focus and i == current_view:
-                if self.viewer.layers.selection.active != layer: # Avoid generating unnecessary triggers
-                    self.viewer.layers.selection.active = layer
+        if self._calibration_layer_focus:
+            if self.viewer.layers.selection.active != layer:  # Avoid generating unnecessary triggers
+                self.viewer.layers.selection.active = layer
 
-            # Make the relevant views visible or invisible:
-            desired_state =  (i == current_view)
-            if layer.visible != desired_state: # Avoid generating unnecessary triggers:
-                layer.visible = desired_state
-                layer.mode = "select"
+        if not layer.visible:  # Avoid generating unnecessary triggers
+            layer.visible = True
+            layer.mode = "select"
 
     def _refresh_visibility_and_focus_of_all_calibration_layers(self):
         if self._calibration_layer_visibility:
             self._show_and_activate_correct_generic_calibration_layer()
-            self.event_calibration_layer().visible = True
+            # Guarded the same way the generic layer already is.
+            event_layer = self.event_calibration_layer()
+            if not event_layer.visible:
+                event_layer.visible = True
         else:
             self._hide_generic_calibration_layers()
             # Same guard _hide_generic_calibration_layers() already uses on the other layers,
@@ -313,17 +380,18 @@ class CalibrationManager:
                 event_layer.visible = False
 
     def clone_only_this_fid_view_into_event(self, idx, name, generic_calibration_layer):
-        #print(f"About to clone generic fiducial {idx=} with {name=}")
+        # print(f"About to clone generic fiducial {idx=} with {name=}")
         destination_layer = self.event_calibration_layer()
 
         # TODO: Either current_event should be passed in (like view) or view should use current_step look up.
         # It makes no sense for one to do one and the other the other!
-        current_event = self.viewer.dims.current_step[1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
+        current_event = self.viewer.dims.current_step[
+            1]  # axis 0 is 'View', 1 is 'Event', 2 and 3 are image row and col
 
-        # Find view from generic_calibration_layer:
-        view = [l.name for l in self.generic_calibration_layers()].index(
-            generic_calibration_layer.name)  # names are unique
-        #print(f"Clone thinks {view=}.")
+        # With one merged layer (12-2), "which view" can no longer be found by matching which
+        # layer object was clicked - read it straight off the clicked point's own stored
+        # coordinate instead. Robust regardless of the merged array's internal row layout.
+        view = int(generic_calibration_layer.data[idx][0])
 
         # Don't allow unnamed fid insertion:
         if name == "" or name == None:
@@ -343,7 +411,9 @@ class CalibrationManager:
                                                   f"camera {view+1}'s view of event {current_event}.")
             return
 
-        xy = generic_calibration_layer.data[idx]
+        # The clicked point's data is now [view, event, y, x] (4D, since the merge) rather than
+        # [y, x] - take only the last two.
+        xy = generic_calibration_layer.data[idx][2:]
         label = generic_calibration_layer.properties["labels"][idx]
         #print(f"properties were {generic_calibration_layer.properties["labels"]}")
         #print(f"Found label {label=} in clone_fid_into_event for {view=}") # Correct label is being found, but wrong one stored.
@@ -377,53 +447,53 @@ class CalibrationManager:
         destination_layer.refresh() # render
 
     def clone_all_views_of_this_fid_into_event(self, idx, name):
-        #print(f"About to clone generic fiducial {idx=} with {name=} into event.")
-        for view, generic_calibration_layer in enumerate(self.generic_calibration_layers()):
-            self.clone_only_this_fid_view_into_event(idx, name, generic_calibration_layer)
+        # print(f"About to clone generic fiducial {idx=} with {name=} into event.")
+        # With one merged layer (12-2), "the same fiducial in another view" is a different row,
+        # not the same idx on a different layer object - find each view's row for this same
+        # logical (slot, event) and clone each one in turn.
+        layer = self.generic_calibration_layers()[0]
+        num_events = self._num_events_on_generic_layer(layer)
+        _, slot, event_index = self._generic_layer_view_slot_event(idx, num_events)
+        for view in range(3):
+            other_idx = self._generic_layer_row_index(view, slot, event_index, num_events)
+            self.clone_only_this_fid_view_into_event(other_idx, name, layer)
 
     def rename_point(self, idx, name, type):
-        # print(f"Renaming point idx={idx} to name={name}")
+        """Rename a generic fiducial. Two independent kinds of propagation happen here: within
+        the clicked view, the front/back partner slot gets the paired name (e.g. naming a front
+        slot "A'" also names its back partner "A") - unchanged logic from before the merge, just
+        computed from a local slot number now rather than a raw array index. Separately, the same
+        logical slot gets renamed in every view and every event too, since a name identifies one
+        physical mark regardless of camera angle or which photo is showing.
+        """
+        layer = self.generic_calibration_layers()[0]
+        num_events = self._num_events_on_generic_layer(layer)
+        clicked_view, clicked_slot, clicked_event = self._generic_layer_view_slot_event(idx, num_events)
 
-        other_idx = None  # Default
-        other_name = None  # Default
-
-        # Could add in the next check, but it is arguably unnecessary.
-        # type_is_fiducial = (type == "front" or type == "back")
-        # if type_is_fiducial and name != "":
-        #    # Check that there is not already a fid with this name, and forbid if there is.
-        #    # We do not want multiple pairs of generic fids!
-        #    for layer in self.generic_calibration_layers():
-        #        if name in layer.properties["labels"]:
-        #            napari.utils.notifications.show_error(f'A generic fiducial named "{name}" already exists.')
-        #            return
-
+        other_slot = None
+        other_name = None
         if type == "front":
-            other_idx = idx + 1  # we store front-then-back, so back is +1 on.
+            other_slot = clicked_slot + 1  # we store front-then-back, so back is +1 on.
             other_name = name[:-1]  # all bar the last character (to remove prime)
         if type == "back":
-            other_idx = idx - 1  # we store front-then-back, so front is -1 on.
+            other_slot = clicked_slot - 1  # we store front-then-back, so front is -1 on.
             other_name = name + "'"
 
-        for layer in self.generic_calibration_layers():
-            layer.properties["labels"][idx] = name  # This change is needed for saving purposes.
-            if other_idx is not None and other_name is not None:
-                layer.properties["labels"][other_idx] = other_name  # This change is needed for saving purposes.
-            # Mutating properties in place like this doesn't trigger napari's own redraw. The
-            # "reassign text to itself" trick used elsewhere in this file only seems to reliably
-            # force an immediate redraw for whichever layer is currently active, not merely
-            # visible - explicitly calling refresh() is the more forceful mechanism we already
-            # confirmed works reliably elsewhere in this codebase.
-            layer.text = layer.text
-            layer.refresh()
+        slots_and_names = [(clicked_slot, name)]
+        if other_slot is not None and other_name is not None:
+            slots_and_names.append((other_slot, other_name))
 
-        # This direct array mutation doesn't fire any napari event on its own, unlike a drag - so
-        # a fresh label would otherwise never reach self.calibration_data until/unless the same
-        # point later also happens to be dragged. Sync explicitly here instead.
-        for view_index in range(len(self.generic_calibration_layers())):
-            self._sync_generic_template_from_layer(view_index)
+        for slot, slot_name in slots_and_names:
+            for view in range(3):
+                for event_index in range(num_events):
+                    row = self._generic_layer_row_index(view, slot, event_index, num_events)
+                    layer.properties["labels"][row] = slot_name  # needed for saving purposes
 
-            layer.text = layer.text  # necessary so that layer.text becomes "aware" of the changes we made to layer.properties
-            layer.refresh() # render changes to screen
+        layer.text = layer.text  # necessary so that layer.text becomes "aware" of the changes we made to layer.properties
+        layer.refresh()  # render changes to screen
+        # Renaming mutates properties directly, which doesn't fire events.data on its own - sync
+        # explicitly here, same reasoning as the original per-view version of this sync.
+        self._sync_generic_template_from_layer()
 
     def on_mouse(self, layer, event):
         # This implements a right-click drop-down menu in response to a point in a generic calibration layer.
@@ -667,49 +737,139 @@ After event.type='mouse_release' event.button=2
 
         return points_in_view, labels, colours, types, symbols
 
-    def _default_generic_calibration_layers(self):
+    def _generic_layer_row_index(self, view, slot, event_index, num_events):
+        """Canonical mapping from a logical fiducial slot to a row in the merged generic layer's
+        data. Rows are grouped as (view, slot) blocks of num_events contiguous rows each - one real
+        duplicate row per event, so a fiducial correctly shows up regardless of which event is being
+        viewed. The old 3-separate-layers system got this "for free" by having no event axis at all;
+        a real 4D layer needs it done explicitly. slot runs 0-5 (front,back alternating within a view,
+        matching today's order).
+        """
+        return (view * 6 + slot) * num_events + event_index
+
+    def _generic_layer_view_slot_event(self, idx, num_events):
+        """Inverse of _generic_layer_row_index."""
+        event_index = idx % num_events
+        block = idx // num_events
+        view = block // 6
+        slot = block % 6
+        return view, slot, event_index
+
+    def _merged_generic_layer_arrays(self, num_events):
+        """Combine the per-view arrays from _default_generic_layer_arrays() (left untouched,
+        since restore logic still depends on it until 12-2d) into one merged layout with num_events
+        duplicate rows per logical (view, slot) fiducial - see _generic_layer_row_index for
+        the exact row layout. Points become 4D [view, event, y, x] coordinates, matching every other
+        multi-dimensional layer in this plugin.
+        """
         points_in_view, labels, colours, types, symbols = self._default_generic_layer_arrays()
+
+        total_rows = 3 * 6 * num_events
+        merged_points = [None] * total_rows
+        merged_labels = [None] * total_rows
+        merged_colours = [None] * total_rows
+        merged_types = [None] * total_rows
+        merged_symbols = [None] * total_rows
+
+        for view in range(3):
+            for slot in range(6):
+                y, x = points_in_view[view][slot]
+                for event_index in range(num_events):
+                    row = self._generic_layer_row_index(view, slot, event_index, num_events)
+                    merged_points[row] = [view, event_index, y, x]
+                    merged_labels[row] = labels[slot]
+                    merged_colours[row] = colours[slot]
+                    merged_types[row] = types[slot]
+                    merged_symbols[row] = symbols[slot]
+
+        return np.array(merged_points), merged_labels, merged_colours, merged_types, merged_symbols
+
+    def _default_generic_calibration_layers(self):
+        # Placeholder single-event count - the real count isn't knowable yet at this point in the
+        # normal flow (CalibrationManager is constructed before images are loaded). Rebuilt for
+        # real via rebuild_generic_layer_for_event_count() once images actually load.
+        points, labels, colours, types, symbols = self._merged_generic_layer_arrays(num_events=1)
 
         # If in debug mode can replace the points and labels with ones that are physically interesting.
         # Don't give this option to the students!
         debug_fiducial_mode = False
 
-        # The pre-made points assume 3 pairs of fiducials in each view, so:
         if debug_fiducial_mode and CalibrationManager.num_generic_front_back_fid_pairs == 3:
-            from .analysis import debug_points_view_0_calibration_layer
-            from .analysis import debug_points_view_1_calibration_layer
-            from .analysis import debug_points_view_2_calibration_layer
-            from .analysis import debug_point_labels_all_calibration_layers
-            points_in_view = [
-                debug_points_view_0_calibration_layer,
-                debug_points_view_1_calibration_layer,
-                debug_points_view_2_calibration_layer,
-            ]  # overwrites old points_in_view
-            labels = debug_point_labels_all_calibration_layers
+            # TODO: the debug point sets predate the merged-layer layout (12-2) and are 2D
+            # per-view arrays - they'd need updating to the merged [view, event, y, x] shape
+            # before this branch can be used again. Left disabled rather than silently wrong.
+            pass
 
-        layers = [
-            self._single_generic_configuration_layer
-            (v, points_in_view[v], labels, colours, types, symbols,  # symbol_sizes
-             )
-            for v in view_indices
-        ]
+        return [self._single_generic_configuration_layer(points, labels, colours, types, symbols)]
 
-        return layers
+    def rebuild_generic_layer_for_event_count(self, num_events) -> None:
+        """Rebuild the merged generic calibration layer so each of its 18 logical fiducial slots has
+        one real duplicate row per event, replacing the num_events=1 placeholder it was built with at
+        __init__ time. Called once, right after the real image data is loaded and the true event count
+        is finally known.
+        """
+        points, labels, colours, types, symbols = self._merged_generic_layer_arrays(num_events)
+        layer = self.generic_calibration_layers()[0]
+        layer.data = points
+        # border_color/face_color/symbol are separate from properties and don't automatically
+        # resize themselves to match a longer .data array - reassign them explicitly too, rather
+        # than risk a length mismatch (the exact class of bug properties dict rebuilds bit us with
+        # once already, in 11b-ii).
+        layer.border_color = colours
+        layer.face_color = colours
+        layer.symbol = symbols
+        layer.properties = {
+            "labels": np.array(labels, dtype=object),
+            "colours": colours,
+            "types": types,
+            "symbols": symbols,
+        }
+        # Rebuilding text properly, not just reassigning to itself.
+        layer.text = {
+            'string': 'labels',
+            'color': colours,
+            'size': 12,
+            'anchor': 'center',
+            'translation': np.array([0, 0, -150, 0]),
+        }
+        layer.refresh()
+        # mark_clean() was called once already, at __init__ - before this rebuild, and before the
+        # real event count was even knowable. Without re-marking clean here, the dirty-check
+        # baseline stays frozen at that placeholder shape forever, and every future dirty_things()
+        # call crashes trying to compare against it (shape mismatch.
+        self.mark_clean()
 
     def _restore_generic_calibration_layers(self, generic_templates) -> None:
-        """Rebuild the 3 generic calibration layers from a loaded session's saved fiducial positions,
-        filling in the standard default position/label for any slot the save file didn't cover.
-        These layers are move-only (no add/delete), so a name missing entirely after a load would
+        """Rebuild the merged generic calibration layer from a loaded session's saved fiducial
+        positions, filling in the standard default position/label for any slot the save file didn't
+        cover. The layer is move-only (no add/delete), so a name missing entirely after a load would
         otherwise be permanently unplaceable for the rest of the session.
 
         Each name is put back in its own original slot (via slot_indices) wherever possible, so colour
         and relative layout next to any still-unlabelled slots both survive a round-trip unchanged.
         Falls back to claiming the first available slot of the matching type only for names with no
         recorded slot (e.g. a .pkl saved before slot tracking existed) or a slot collision.
+
+        Since generic_templates has no per-event concept at all, the resolved position for each
+        (view, slot) is replicated across every event's duplicate row - num_events comes from the
+        currently loaded layer's own row count, not from anything in the save file, so a session
+        saved against a different event count is handled correctly automatically.
         """
         from .analysis import FIDUCIAL_FRONT, FIDUCIAL_BACK
 
-        points_in_view, default_labels, colours, types, symbols = self._default_generic_layer_arrays()
+        layer = self.generic_calibration_layers()[0]
+        num_events = self._num_events_on_generic_layer(layer)
+        if num_events == 0:
+            return
+
+        points_in_view, default_labels, colours_base, types_base, symbols_base = self._default_generic_layer_arrays()
+
+        total_rows = 3 * 6 * num_events
+        merged_points = [None] * total_rows
+        merged_labels = [None] * total_rows
+        merged_colours = [None] * total_rows
+        merged_types = [None] * total_rows
+        merged_symbols = [None] * total_rows
 
         for view_index in range(3):
             template = generic_templates[view_index]
@@ -722,9 +882,9 @@ After event.type='mouse_release' event.button=2
                 slot_index = template.slot_indices.get(name)
                 is_front = name in FIDUCIAL_FRONT
                 is_back = name in FIDUCIAL_BACK
-                slot_type_matches = slot_index is not None and 0 <= slot_index < len(types) and (
-                        (is_front and types[slot_index] == "front")
-                        or (is_back and types[slot_index] == "back")
+                slot_type_matches = slot_index is not None and 0 <= slot_index < len(types_base) and (
+                        (is_front and types_base[slot_index] == "front")
+                        or (is_back and types_base[slot_index] == "back")
                 )
                 if slot_type_matches and slot_index not in assigned_slots:
                     labels[slot_index] = name
@@ -734,31 +894,52 @@ After event.type='mouse_release' event.button=2
                     unresolved_names.append(name)
 
             if unresolved_names:
-                front_slots = [i for i, t in enumerate(types) if t == "front" and i not in assigned_slots]
-                back_slots = [i for i, t in enumerate(types) if t == "back" and i not in assigned_slots]
+                front_slots = [i for i, t in enumerate(types_base) if t == "front" and i not in assigned_slots]
+                back_slots = [i for i, t in enumerate(types_base) if t == "back" and i not in assigned_slots]
                 for name in sorted(unresolved_names):
                     target_slots = front_slots if name in FIDUCIAL_FRONT else back_slots
                     if not target_slots:
-                        continue  # nowhere left - only possible with more saved names than slots
+                        continue
                     slot_index = target_slots.pop(0)
                     labels[slot_index] = name
                     points[slot_index] = template.positions[name]
 
-            layer = self.generic_calibration_layers()[view_index]
-            layer.data = np.array(points)
-            # All four properties keys must be rebuilt together - overwriting only "labels" would
-            # silently wipe "types", which the right-click menu depends on to know what a slot is.
-            layer.properties = {
-                "labels": np.array(labels, dtype=object),
-                "colours": colours,
-                "types": types,
-                "symbols": symbols,
-            }
-            layer.text = layer.text
-            layer.refresh()
+            # Replicate this view's resolved slots across every event's duplicate row.
+            for slot in range(6):
+                y, x = points[slot]
+                for event_index in range(num_events):
+                    row = self._generic_layer_row_index(view_index, slot, event_index, num_events)
+                    merged_points[row] = [view_index, event_index, y, x]
+                    merged_labels[row] = labels[slot]
+                    merged_colours[row] = colours_base[slot]
+                    merged_types[row] = types_base[slot]
+                    merged_symbols[row] = symbols_base[slot]
 
-        for view_index in range(3):
-            self._sync_generic_template_from_layer(view_index)
+        layer.data = np.array(merged_points)
+        # border_color/face_color/symbol are separate from properties and don't automatically
+        # resize themselves to match a longer .data array - the same lesson learned (the hard
+        # way) in rebuild_generic_layer_for_event_count applies identically here.
+        layer.border_color = merged_colours
+        layer.face_color = merged_colours
+        layer.symbol = merged_symbols
+        layer.properties = {
+            "labels": np.array(merged_labels, dtype=object),
+            "colours": merged_colours,
+            "types": merged_types,
+            "symbols": merged_symbols,
+        }
+        # Rebuilt properly, not just layer.text = layer.text - that was still holding a stale,
+        # wrong-length colour array in the exact bug we just fixed in the sibling rebuild method.
+        layer.text = {
+            'string': 'labels',
+            'color': merged_colours,
+            'size': 12,
+            'anchor': 'center',
+            'translation': np.array([0, 0, -150, 0]),
+        }
+        layer.refresh()
+
+        self._sync_generic_template_from_layer()
 
     def _restore_event_calibration_layer(self) -> None:
         """Rebuild the per-image calibration layer's visible stamps from calibration_data.event_views
@@ -782,62 +963,37 @@ After event.type='mouse_release' event.button=2
         # the same lag bug fixed once already elsewhere in this file.
         self._sync_calibration_data_from_event_layer()
 
-    def _single_generic_configuration_layer(self, view_index,
-                                            points, labels, colours, types, symbols, #symbol_sizes
-                                            ):
+    def _single_generic_configuration_layer(self, points, labels, colours, types, symbols):
         """
-        The point of this function is to provide a single route through which generic config layers are constructed,
-        so that even if such layers need internally derived settings, or things not in a csv file, they can be applied
-        universally and consistently.
-        For example, the layer names are taken from GENERIC_CALIBRATION_LAYER_NAMES[view_index].
+        The point of this function is to provide a single route through which the generic config layer
+        is constructed, so that even if it needs internally derived settings, or things not in a csv file,
+        they can be applied consistently. One merged layer now, not one per camera (12-2) - sliced by the
+        View axis instead of requiring manual switching.
         """
         props = {
             'labels': labels,
             'colours': colours,
             'types': types,
             'symbols': symbols,
-            ### 'symbol_sizes': symbol_sizes,
         }
         layer = napari.layers.Points(
             points,
-            name=GENERIC_CALIBRATION_LAYER_NAMES[view_index],
-            # size=20,
-            ### size=symbol_sizes,
+            name=GENERIC_CALIBRATION_LAYER_NAME,
+            ndim=4,
             properties=props,
             border_width=7,
             border_width_is_relative=False,
             border_color=colours,
             face_color=colours,
             symbol=symbols,
-            # out_of_slice_display=False,
             visible=False,
         )
         layer.text = {
-            'string': 'labels', # This is a key in properties
+            'string': 'labels',  # This is a key in properties
             'color': colours,
             'size': 12,
             'anchor': 'center',
-            'translation': np.array([-150, 0]),  # move text 150 (data) pixels up
+            'translation': np.array([0, 0, -150, 0]),
         }
+        layer.refresh()
         return layer
-
-    def _setup_calibration_layers(self):
-        layers = self._default_generic_calibration_layers()
-
-        # Overwrite data if layer already exists, otherwise make a note of new layers
-        new_layers = []
-        for layer in layers:
-            if layer.name in self.viewer.layers:
-                # Existing layer, so callbacks already exist too, so just overwrite old layer data:
-                overwrite_layer(self.viewer.layers[layer.name], layer)
-                #print("\n\n REPLACING DATA \n\n")
-            else:
-                # New layer!
-                new_layers.append(layer)
-                #print("\n\n NOTING NEW LAYER \n\n")
-
-        # Tell Napari about any new generic calibration layers:
-        for new_layer in new_layers:
-            self.viewer.add_layer(new_layer)
-
-        return new_layers

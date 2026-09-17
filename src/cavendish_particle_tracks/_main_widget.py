@@ -919,6 +919,11 @@ class ParticleTracksWidget(QWidget):
 
         self.calibration_manager._restore_generic_calibration_layers(session.generic_templates)
         self.calibration_manager._restore_event_calibration_layer()
+        # Same reasoning as the __init__-time fix: without re-marking clean here, the calibration
+        # dirty-check baseline stays stale relative to what was just loaded.
+        self.calibration_manager.mark_clean()
+        # refresh_symbol_sizes() is otherwise only triggered by a zoom event.
+        self.calibration_manager.refresh_symbol_sizes()
 
         import copy
         self._data_at_last_save = copy.deepcopy(self.data)  # a freshly loaded session isn't "dirty"
@@ -1030,6 +1035,10 @@ class ParticleTracksWidget(QWidget):
                               )
         bubble_chamber_layer = self.viewer.layers[IMAGE_LAYER_NAME]
         self.viewer.dims.axis_labels = ("View", "Event", "Y", "X")
+
+        # The generic calibration layer was built with a placeholder single-event count at
+        # CalibrationManager construction time, since the real count isn't knowable until now.
+        self.calibration_manager.rebuild_generic_layer_for_event_count(image_count_first)
 
         # Move to the first event in the series
         self.viewer.dims.set_current_step(1, 0)
@@ -1272,12 +1281,22 @@ class ParticleTracksWidget(QWidget):
                 stamped_view = event_views.get((event_number, view_index))
                 if stamped_view is not None:
                     views[view_index] = stamped_view
-
             existing_row_index = None
             for i, row in enumerate(self.data):
                 if isinstance(row, CalibrationRow) and row.event_number == event_number:
                     existing_row_index = i
                     break
+
+            is_now_empty = all(len(v.stamped) == 0 for v in views)
+            if is_now_empty:
+                # No stamps left for this event at all - remove the row entirely rather than
+                # leaving a permanent, un-removable "_ _ _" placeholder behind. "Delete process" is
+                # deliberately blocked for calibration rows (10d-3), so deleting every stamp is the
+                # only way a student has to remove one - this makes that action actually complete.
+                if existing_row_index is not None:
+                    del self.data[existing_row_index]
+                    self.table.removeRow(existing_row_index)
+                continue
 
             if existing_row_index is not None:
                 self.data[existing_row_index].views = views
