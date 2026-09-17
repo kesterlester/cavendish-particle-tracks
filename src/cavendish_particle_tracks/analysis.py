@@ -400,7 +400,7 @@ class ParticleDecay:
             else:
                 angle_char = VTX_NOT_APPLICABLE
             blocks.append(origin_char + decay_char + track_char + angle_char)
-        return " ".join(blocks)
+        return "  ".join(blocks)
 
     def vars_to_show(self, calibrated=False):
         return [
@@ -527,7 +527,7 @@ class CalibrationRow:
         for view in self.views:
             names = sorted(view.stamped.keys())
             blocks.append("/".join(names) if names else VTX_NONE)
-        return " ".join(blocks)
+        return "  ".join(blocks)
 
     def vars_to_save(self):
         # Deliberately mirrors ParticleDecay's own column list exactly, asked for fresh

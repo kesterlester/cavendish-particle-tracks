@@ -22,18 +22,20 @@ from qtpy.QtWidgets import (
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
+    QLabel,
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
-
+from qtpy.QtCore import Qt
 from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
-from ._calibration_manager import CalibrationManager
+from ._calibration_manager import CalibrationManager, GENERIC_CALIBRATION_LAYER_NAME, PER_IMAGE_CALIBRATION_LAYER_NAME
 from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession
 
@@ -110,11 +112,14 @@ class ParticleTracksWidget(QWidget):
         self.show_origin_decay_checkbox.setChecked(True)
         self.show_all_processes_checkbox = QCheckBox("Show all processes")
         self.show_all_processes_checkbox.setChecked(False)
-        self.show_decay_angles_checkbox = QCheckBox("Show decay angles")
-        self.show_decay_angles_checkbox.setChecked(False)
-        self.show_decay_angles_checkbox.setEnabled(False)
         self.show_fiducials_checkbox = QCheckBox("Show fiducial markers")
         self.show_fiducials_checkbox.setChecked(True)
+        # Created here (early), not down near the rest of the Layers panel setup - this needs to
+        # exist before set_UI_image_loaded() runs for the first time, a few lines below, the same
+        # constraint the checkbox it replaces was already satisfying by being created this early.
+        self.decay_angles_nav_button = QPushButton("Decay Angles (K)")
+        self.decay_angles_nav_button.setCheckable(True)
+        self.decay_angles_nav_button.setEnabled(False)
         # self.stereoshift_button = QPushButton("Stereoshift")
         self.save_data_button = QPushButton("Save process table")
         self.load_data_button = QPushButton("Load process table")
@@ -125,6 +130,9 @@ class ParticleTracksWidget(QWidget):
         self.table.selectionModel().selectionChanged.connect(
             self._on_row_selection_changed
         )
+        # selectionChanged only fires on an actual change, so it never runs on a same-row
+        # re-click - table.clicked fires on every click regardless, closing that gap.
+        self.table.clicked.connect(self._return_focus_to_canvas)
         # Apply magnification disabled until the magnification parameters are computed
         #self.apply_magnification_button = QRadioButton("Apply magnification")
         #self.apply_magnification_button.setEnabled(False)
@@ -137,7 +145,6 @@ class ParticleTracksWidget(QWidget):
         self.show_track_vertices_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
         self.show_origin_decay_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
         self.show_all_processes_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
-        self.show_decay_angles_checkbox.stateChanged.connect(lambda _: self._on_toggle_decay_angle_diagram())
         #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
         #self.apply_magnification_button.toggled.connect(
         #    self._on_click_apply_magnification
@@ -152,16 +159,15 @@ class ParticleTracksWidget(QWidget):
 
         if self.docking_area == "bottom":
             self.buttonbox = QGridLayout()
-            self.buttonbox.addWidget(self.load_button, 0, 0)
-            self.buttonbox.addWidget(self.load_data_button, 0, 1)
+            self.buttonbox.addWidget(self.load_data_button, 0, 0)
+            self.buttonbox.addWidget(self.save_data_button, 0, 1)
             self.buttonbox.addWidget(self.particle_decays_menu, 1, 0)
             self.buttonbox.addWidget(self.delete_process, 1, 1)
-            self.buttonbox.addWidget(self.save_data_button, 2, 0)
-            self.buttonbox.addWidget(self.show_all_processes_checkbox, 2, 1)
+            self.buttonbox.addWidget(self.load_button, 2, 0, 1, 2)
             self.buttonbox.addWidget(self.show_track_vertices_checkbox, 3, 0)
             self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
-            self.buttonbox.addWidget(self.show_decay_angles_checkbox, 4, 0)
-            self.buttonbox.addWidget(self.show_fiducials_checkbox, 4, 1)
+            self.buttonbox.addWidget(self.show_fiducials_checkbox, 4, 0)
+            self.buttonbox.addWidget(self.show_all_processes_checkbox, 4, 1)
             # self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             # self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
 
@@ -182,9 +188,8 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.delete_process)
             self.buttonbox.addWidget(self.show_track_vertices_checkbox)
             self.buttonbox.addWidget(self.show_origin_decay_checkbox)
-            self.buttonbox.addWidget(self.show_all_processes_checkbox)
-            self.buttonbox.addWidget(self.show_decay_angles_checkbox)
             self.buttonbox.addWidget(self.show_fiducials_checkbox)
+            self.buttonbox.addWidget(self.show_all_processes_checkbox)
             self.buttonbox.addWidget(self.table)
             # self.buttonbox.addWidget(self.apply_magnification_button)
             # self.buttonbox.addWidget(self.stereoshift_button)
@@ -234,6 +239,129 @@ class ParticleTracksWidget(QWidget):
                 self.show_fiducials_checkbox.isChecked(), False
             )
         )
+
+        # A dedicated panel for jumping straight to the 3 layers someone actually interacts with
+        # while measuring/calibrating, so switching between them doesn't require the native layer
+        # list at all (12-3). Built as its own dock widget via napari's public API - name= gives
+        # it the same Window-menu recovery property the native layer list already has, so it can
+        # always be brought back even if something about this panel goes wrong.
+        layers_panel = QWidget()
+        layers_panel_layout = QVBoxLayout()
+        layers_panel_layout.setSpacing(20)
+        layers_panel_layout.setContentsMargins(-1, 20, -1, -1)
+        layers_panel_layout.addStretch()
+        layers_panel.setLayout(layers_panel_layout)
+        layers_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+
+        self.radii_lengths_nav_button = QPushButton("Radii/Lengths (G)")
+        self.generic_fiducials_nav_button = QPushButton("Generic Fiducials (H)")
+        self.saved_fiducials_nav_button = QPushButton("Saved Fiducials (J)")
+
+        layers_panel_layout.addWidget(self.radii_lengths_nav_button)
+        layers_panel_layout.addWidget(self.generic_fiducials_nav_button)
+        layers_panel_layout.addWidget(self.saved_fiducials_nav_button)
+
+        self.radii_lengths_nav_button.clicked.connect(lambda: self._activate_layer(MEASUREMENTS_LAYER_NAME))
+        self.generic_fiducials_nav_button.clicked.connect(lambda: self._activate_layer(GENERIC_CALIBRATION_LAYER_NAME))
+        self.saved_fiducials_nav_button.clicked.connect(lambda: self._activate_layer(PER_IMAGE_CALIBRATION_LAYER_NAME))
+
+        # Created eagerly here, not lazily on first use (its original 8c-2 design) - its starting
+        # position is irrelevant either way, since _load_decay_angle_diagram_for_selected_process
+        # always recomputes it fresh the moment it's actually shown. Eager creation means the
+        # button below always has something real to activate, with no first-click special case.
+        self._setup_decay_angle_diagram_layer()
+        layers_panel_layout.addWidget(self.decay_angles_nav_button)
+        self.decay_angles_nav_button.clicked.connect(lambda: self._activate_layer(ANGLES_LAYER_NAME))
+        layers_panel_layout.addStretch()
+
+        for button in (
+                self.radii_lengths_nav_button,
+                self.generic_fiducials_nav_button,
+                self.saved_fiducials_nav_button,
+                self.decay_angles_nav_button,
+        ):
+            button.setCheckable(True)
+
+        self.viewer.window.add_dock_widget(layers_panel, name="layer", area="left")
+
+        self.viewer.layers.selection.events.active.connect(self._on_active_layer_changed)
+
+        # Hidden by default now that the Layers panel above covers everything it was used for -
+        # still fully recoverable via napari's own native Window menu.
+        try:
+            self.viewer.window._qt_viewer.dockLayerList.setVisible(False)
+        except AttributeError:
+            pass
+
+        self.viewer.bind_key('g', lambda viewer: self._activate_layer(MEASUREMENTS_LAYER_NAME), overwrite=True)
+        self.viewer.bind_key('h', lambda viewer: self._activate_layer(GENERIC_CALIBRATION_LAYER_NAME), overwrite=True)
+        self.viewer.bind_key('j', lambda viewer: self._activate_layer(PER_IMAGE_CALIBRATION_LAYER_NAME), overwrite=True)
+        self.viewer.bind_key('k', lambda viewer: self._activate_decay_angles_via_shortcut(), overwrite=True)
+
+    def _activate_decay_angles_via_shortcut(self) -> None:
+        # Unlike a button click, calling _activate_layer directly would bypass the button's own
+        # disabled state entirely - Qt only blocks mouse clicks on a disabled button, not a
+        # shortcut calling the underlying method some other way. Check the same source of truth
+        # the button itself uses, rather than duplicating the "only for the right process" rule.
+        if self.decay_angles_nav_button.isEnabled():
+            self._activate_layer(ANGLES_LAYER_NAME)
+
+    def _activate_layer(self, layer_name: str) -> None:
+        if layer_name in self.viewer.layers:
+            self.viewer.layers.selection.active = self.viewer.layers[layer_name]
+
+    def _on_active_layer_changed(self, event=None) -> None:
+        """Single source of truth for two things at once, every time the active layer changes
+        for any reason at all (button click, keyboard shortcut, or someone using the native layer
+        list directly): which of the 4 nav buttons should look highlighted, and whether the decay
+        angle diagram should be shown/hidden/reordered. Both are always recomputed fresh from the
+        current active layer, not tracked as a transition - matching the same full-resync approach
+        used throughout this codebase's calibration syncing, for the same reliability reasons.
+
+        Guarded against its own side effects: showing/hiding/reordering the angles layer, or
+        restoring focus at the end, both change the active layer themselves, which would otherwise
+        re-trigger this same method.
+        """
+        if getattr(self, "_setting_decay_angle_visibility", False):
+            return
+
+        active_layer = self.viewer.layers.selection.active
+        target_name = active_layer.name if active_layer is not None else None
+
+        self._setting_decay_angle_visibility = True
+        try:
+            self.radii_lengths_nav_button.setChecked(target_name == MEASUREMENTS_LAYER_NAME)
+            self.generic_fiducials_nav_button.setChecked(target_name == GENERIC_CALIBRATION_LAYER_NAME)
+            self.saved_fiducials_nav_button.setChecked(target_name == PER_IMAGE_CALIBRATION_LAYER_NAME)
+            self.decay_angles_nav_button.setChecked(target_name == ANGLES_LAYER_NAME)
+
+            if ANGLES_LAYER_NAME in self.viewer.layers:
+                angles_layer = self.viewer.layers[ANGLES_LAYER_NAME]
+                if target_name == ANGLES_LAYER_NAME:
+                    if not angles_layer.visible:
+                        self._load_decay_angle_diagram_for_selected_process()
+                        angles_layer.visible = True
+                        self.viewer.layers.move(self.viewer.layers.index(angles_layer), len(self.viewer.layers))
+                        # Unlike the fiducial layers, this layer's visibility toggles constantly during
+                        # normal use - every process switch. A plain "not visible yet" check would force
+                        # select mode back on every single show, breaking the mode-memory behaviour already
+                        # confirmed working for the other three layers. This needs a genuinely once-ever
+                        # flag instead.
+                        if not getattr(self, "_decay_angles_mode_initialized", False):
+                            angles_layer.mode = "select"
+                            self._decay_angles_mode_initialized = True
+                else:
+                    if angles_layer.visible:
+                        angles_layer.visible = False
+                        self.viewer.layers.move(self.viewer.layers.index(angles_layer), 0)
+
+            # Whatever actually triggered this call is what the user (or our own code) actually
+            # wanted active - restore it in case anything above moved focus elsewhere.
+            if target_name is not None and target_name in self.viewer.layers:
+                if self.viewer.layers.selection.active != self.viewer.layers[target_name]:
+                    self.viewer.layers.selection.active = self.viewer.layers[target_name]
+        finally:
+            self._setting_decay_angle_visibility = False
 
     @property
     def camera_center(self):
@@ -366,9 +494,15 @@ class ParticleTracksWidget(QWidget):
         dims-mismatch guard in _sync_measurement_layer_to_selected_process), so it can't be
         skipped early just because there's no event to jump to.
         """
-        # Reset every time the selected row changes, regardless of the new process's type.
-        self.show_decay_angles_checkbox.setChecked(False)
-
+        # Redirect focus away from the decay-angle diagram every time the selected row changes,
+        # regardless of the new process's type - the shared active-layer listener then handles
+        # actually hiding and reordering it, so nothing else needs to duplicate that logic here.
+        if (
+                ANGLES_LAYER_NAME in self.viewer.layers
+                and self.viewer.layers.selection.active == self.viewer.layers[ANGLES_LAYER_NAME]
+                and MEASUREMENTS_LAYER_NAME in self.viewer.layers
+        ):
+            self.viewer.layers.selection.active = self.viewer.layers[MEASUREMENTS_LAYER_NAME]
         self.set_button_availability()
 
         try:
@@ -381,7 +515,17 @@ class ParticleTracksWidget(QWidget):
             if event_number >= 0:  # -1 means "never actually set"
                 self.viewer.dims.set_current_step(1, event_number)
 
-        self._sync_measurement_layer_to_selected_process()
+            self._sync_measurement_layer_to_selected_process()
+            self._return_focus_to_canvas()
+
+    def _return_focus_to_canvas(self, *_args) -> None:
+        # Accepts and ignores args since table.clicked passes a QModelIndex we don't need -
+        # returns keyboard focus to the canvas, otherwise it stays on the table after a row
+        # click, and the G/H/J/K shortcuts (which need canvas focus to fire) silently stop working.
+        try:
+            self.viewer.window.qt_viewer.canvas.native.setFocus()
+        except AttributeError:
+            pass
 
     def _restyle_measurement_points(self) -> None:
         """Ring-highlight each point on the measurement layer to show what it currently contributes:
@@ -557,7 +701,7 @@ class ParticleTracksWidget(QWidget):
         self._restyle_measurement_points()
         self._sync_other_processes_layer()
         self._refresh_decay_angle_table_cells()
-        if self.show_decay_angles_checkbox.isChecked():
+        if ANGLES_LAYER_NAME in self.viewer.layers and self.viewer.layers[ANGLES_LAYER_NAME].visible:
             self._load_decay_angle_diagram_for_selected_process()
 
     def set_button_availability(self) -> None:
@@ -583,13 +727,13 @@ class ParticleTracksWidget(QWidget):
             self.delete_process.setEnabled(True)
             # self.stereoshift_button.setEnabled(True)
             if self.data[selected_row].index == 4:
-                self.show_decay_angles_checkbox.setEnabled(True)
+                self.decay_angles_nav_button.setEnabled(True)
             else:
-                self.show_decay_angles_checkbox.setEnabled(False)
+                self.decay_angles_nav_button.setEnabled(False)
             return
         except IndexError:
             self.delete_process.setEnabled(False)
-            self.show_decay_angles_checkbox.setEnabled(False)
+            self.decay_angles_nav_button.setEnabled(False)
             # self.apply_magnification_button.setEnabled(False)
             # self.stereoshift_button.setEnabled(False)
             # self.magnification_button.setEnabled(False)
@@ -600,11 +744,13 @@ class ParticleTracksWidget(QWidget):
         if loaded:
             self.load_button.setEnabled(False)
             self.particle_decays_menu.setEnabled(True)
+            self.load_data_button.setEnabled(True)
         else:
             self.load_button.setEnabled(True)
             self.particle_decays_menu.setEnabled(False)
+            self.load_data_button.setEnabled(False)
             self.delete_process.setEnabled(False)
-            self.show_decay_angles_checkbox.setEnabled(False)
+            self.decay_angles_nav_button.setEnabled(False)
             # self.stereoshift_button.setEnabled(False)
             # if ENABLE_MAG:
             # self.apply_magnification_button.setEnabled(False)
@@ -733,10 +879,10 @@ class ParticleTracksWidget(QWidget):
             face_color=colors,
             text=text,
             ndim=2,
+            visible=False,
         )
         shapes_layer.events.data.connect(self._enforce_decay_angle_lines_coincident)
         shapes_layer.events.data.connect(self._on_decay_angle_diagram_changed)
-        shapes_layer.events.visible.connect(self._on_decay_angle_layer_visibility_changed)
         return shapes_layer
 
     def _on_decay_angle_diagram_changed(self, event=None) -> None:
@@ -793,20 +939,6 @@ class ParticleTracksWidget(QWidget):
         )
         self._refresh_saved_vertices_cell(selected_row)
 
-    def _on_decay_angle_layer_visibility_changed(self, event=None) -> None:
-        """Keep the checkbox honest if the diagram's visibility changes some other way - e.g.
-        cancelling the Decay Angles popup hides this same shared layer directly, which would
-        otherwise leave the checkbox showing 'checked' while the diagram is actually hidden.
-        """
-        if getattr(self, "_setting_decay_angle_visibility", False):
-            return
-        layer = self.viewer.layers[ANGLES_LAYER_NAME]
-        self._setting_decay_angle_visibility = True
-        try:
-            self.show_decay_angles_checkbox.setChecked(layer.visible)
-        finally:
-            self._setting_decay_angle_visibility = False
-
     def _enforce_decay_angle_lines_coincident(self, event=None) -> None:
         """Keep the Lambda/p/pi lines meeting at a shared decay vertex -
         the same correction the Decay Angles popup already applies, wired
@@ -826,25 +958,6 @@ class ParticleTracksWidget(QWidget):
                 ).any():
                     data[i][0] = layer.data[shapes_modified[0]][0]
                     layer.data = data
-
-    def _on_toggle_decay_angle_diagram(self) -> None:
-        if getattr(self, "_setting_decay_angle_visibility", False):
-            return
-        layer = self._setup_decay_angle_diagram_layer()
-        self._setting_decay_angle_visibility = True
-        try:
-            if self.show_decay_angles_checkbox.isChecked():
-                self._load_decay_angle_diagram_for_selected_process()
-                self._activate_calibration_layer(layer)
-            else:
-                self._deactivate_calibration_layer(layer)
-                # select_previous() inside that helper picks whatever layer happens to sit above
-                # this one in the list, which isn't necessarily useful - explicitly hand focus back to
-                # the layer people actually want to keep working on.
-                if MEASUREMENTS_LAYER_NAME in self.viewer.layers:
-                    self.viewer.layers.selection.active = self.viewer.layers[MEASUREMENTS_LAYER_NAME]
-        finally:
-            self._setting_decay_angle_visibility = False
 
     # def _on_click_stereoshift(self) -> StereoshiftDialog:
     #     """When the 'Calculate stereoshift' button is clicked, open stereoshift dialog."""
@@ -1491,23 +1604,3 @@ class ParticleTracksWidget(QWidget):
         self._data_at_last_save = copy.deepcopy(self.data) # mark as clean!  Need deepcopy as otherwise changes within ParticleData objects are not spotted!
         #print(f"SSSSSAAAVING AFTER {self._data_at_last_save=}")
         napari.utils.notifications.show_info("Data saved to " + file_name)
-
-    # Probably no longer needed once mag and angle dialogs work same way as stereo!
-    def _activate_calibration_layer(self, layer):
-        """Show the calibration layer and move it to the top"""
-        layer.visible = True
-        # Move the calibration layer to the top
-        self.viewer.layers.move(
-            self.viewer.layers.index(layer),
-            len(self.viewer.layers),
-        )
-        self.viewer.layers.selection.active = layer
-
-    # Probably no longer needed once mag and angle dialogs work same way as stereo!
-    def _deactivate_calibration_layer(self, layer):
-        """Hide the calibration layer and move it to the bottom"""
-        self.viewer.layers.select_previous()
-        layer.visible = False
-        # Move the calibration layer to the bottom
-        self.viewer.layers.move(self.viewer.layers.index(layer), 0)
-

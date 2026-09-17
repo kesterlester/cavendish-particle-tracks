@@ -365,10 +365,11 @@ class CalibrationManager:
     def _refresh_visibility_and_focus_of_all_calibration_layers(self):
         if self._calibration_layer_visibility:
             self._show_and_activate_correct_generic_calibration_layer()
-            # Guarded the same way the generic layer already is.
             event_layer = self.event_calibration_layer()
             if not event_layer.visible:
                 event_layer.visible = True
+                # First-show default being select mode is most useful here.
+                event_layer.mode = "select"
         else:
             self._hide_generic_calibration_layers()
             # Same guard _hide_generic_calibration_layers() already uses on the other layers,
@@ -469,6 +470,19 @@ class CalibrationManager:
         layer = self.generic_calibration_layers()[0]
         num_events = self._num_events_on_generic_layer(layer)
         clicked_view, clicked_slot, clicked_event = self._generic_layer_view_slot_event(idx, num_events)
+
+        # A name identifies one physical fiducial mark, so it must stay unique across slots.
+        # Checking by slot, not by raw row, since the SAME slot's own name correctly appears on
+        # every view/event's duplicate row already.
+        if name != "":
+            for row_idx, label in enumerate(layer.properties["labels"]):
+                if label == name:
+                    _, existing_slot, _ = self._generic_layer_view_slot_event(row_idx, num_events)
+                    if existing_slot != clicked_slot:
+                        napari.utils.notifications.show_error(
+                            f'A generic fiducial named "{name}" already exists.'
+                        )
+                        return
 
         other_slot = None
         other_name = None
