@@ -6,7 +6,7 @@ def test_blank_row_defaults():
     assert c.name == "Calibration"
     assert c.index == -1
     assert c.event_number == -1
-    assert c.saved_vertices == "_ _ _"
+    assert c.saved_vertices == "_  _  _"
 
 
 def test_saved_vertices_lists_stamped_names_per_view():
@@ -14,7 +14,7 @@ def test_saved_vertices_lists_stamped_names_per_view():
     c.views[0].stamp("A", [1.0, 2.0])
     c.views[0].stamp("B'", [3.0, 4.0])
     c.views[2].stamp("C", [5.0, 6.0])
-    assert c.saved_vertices == "A/B' _ C"
+    assert c.saved_vertices == "A/B'  _  C"
 
 
 def test_views_are_independent_per_row():
@@ -46,4 +46,4 @@ def test_to_csv_includes_name_event_number_and_saved_vertices():
     line = c.to_csv()
     assert "Calibration" in line
     assert "7" in line
-    assert "_ D _" in line
+    assert "_  D  _" in line

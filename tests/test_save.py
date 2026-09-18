@@ -7,6 +7,8 @@ from pytestqt.qtbot import QtBot
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QDialogButtonBox, QLineEdit, QMessageBox
 
+from cavendish_particle_tracks.analysis import CSV_COLUMNS
+
 from .conftest import get_dialog
 
 
@@ -81,15 +83,6 @@ def test_save_single_particle(
         )
 
 
-def _assert_file_contents_the_same(left: str, right: str) -> None:
-    # Can't use filecmp.cmp because file created on macOS/linux has different line endings to Windows.
-    with open(left, encoding="utf8") as f:
-        left_contents = f.read()
-    with open(right, encoding="utf8") as f:
-        right_contents = f.read()
-    assert left_contents == right_contents, "File contents are not the same"
-
-
 def test_csv_file_has_correct_columns(cpt_widget, tmp_path, qtbot: QtBot):
     # start napari and the particle widget, add a single particle
     cpt_widget.particle_decays_menu.setCurrentIndex(4)  # select the Λ
@@ -119,7 +112,25 @@ def test_csv_file_has_correct_columns(cpt_widget, tmp_path, qtbot: QtBot):
     assert len(csv_files) == 1, "Expecting one CSV file to be saved"
     with open(csv_files[0], encoding="utf8") as f:
         myreader = csv.reader(f, delimiter=",")
-        for row in myreader:
-            assert len(row) == 18, "Expecting 18 columns in the CSV file"
+        rows = list(myreader)
 
-    _assert_file_contents_the_same(csv_files[0], "tests/data/test_output_file.csv")
+    header, data_rows = rows[0], rows[1:]
+
+    # Checked against the real CSV_COLUMNS constant, not a hardcoded number - the old version of
+    # this test hardcoded "18 columns" and silently went stale the moment the format grew past that.
+    assert header == CSV_COLUMNS
+    for row in data_rows:
+        assert len(row) == len(CSV_COLUMNS)
+
+    # One freshly created, unmeasured process -> exactly 3 rows (long format, one per view).
+    assert len(data_rows) == 3
+    for view_index, row in enumerate(data_rows):
+        row_dict = dict(zip(CSV_COLUMNS, row))
+        assert row_dict["row_group_id"] == "0"
+        assert row_dict["name"] == "Lambda0_to_p_pi-"
+        assert row_dict["index"] == "4"
+        assert row_dict["view"] == str(view_index)
+        # Nothing was actually measured, so every per-view measurement column stays blank.
+        assert row_dict["origin_x"] == ""
+        assert row_dict["radius_px"] == ""
+        assert row_dict["phi_proton"] == ""

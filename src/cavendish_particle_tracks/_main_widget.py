@@ -37,7 +37,7 @@ from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager, GENERIC_CALIBRATION_LAYER_NAME, PER_IMAGE_CALIBRATION_LAYER_NAME
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, CSV_COLUMNS, round_px
 
 ENABLE_MAG = False
 
@@ -1574,19 +1574,27 @@ class ParticleTracksWidget(QWidget):
 
         # Save as .csv if file_name ends with .csv
         elif file_name.endswith(".csv"):
-            if not len(self.data):
-                napari.utils.notifications.show_error(
-                    "CSV can't represent calibration-only data (no process or calibration rows yet) - "
-                    "save as .pkl instead, or create at least one row first."
-                )
-                return
             with open(file_name, "w", encoding="UTF8", newline="") as f:
-                # write the header
-                f.write(",".join(self.data[0].vars_to_save()) + "\n")
-                # TODO: FIX! Should not access data[0] as this prevents saving empty file.
+                # Main table: every process and calibration entry, long format (one CSV column set shared
+                # by both row types, 3 rows each - see CSV_COLUMNS/to_csv_rows for the full design). Unlike
+                # the old single-row format, an empty self.data is fully representable here - the table just
+                # has a header and zero data rows - so the old "CSV can't represent calibration-only data"
+                # restriction no longer applies.
+                f.write(",".join(CSV_COLUMNS) + "\n")
+                for row_group_id, particle in enumerate(self.data):
+                    f.write(particle.to_csv_rows(row_group_id))
 
-                # write the data
-                f.writelines([particle.to_csv() for particle in self.data])
+                # Generic fiducial templates are workspace-level, not tied to any event, so they don't fit
+                # the main table's row shape at all - a small second table, separated by a blank line, only
+                # written if there's actually something in it.
+                has_generic_calibration_data = any(len(t.positions) > 0 for t in generic_templates)
+                if has_generic_calibration_data:
+                    f.write("\n")
+                    f.write("view,name,x,y,slot_index\n")
+                    for view_index, template in enumerate(generic_templates):
+                        for fiducial_name, xy in template.positions.items():
+                            slot_index = template.slot_indices.get(fiducial_name, "")
+                            f.write(f"{view_index},{fiducial_name},{round_px(xy[0])},{round_px(xy[1])},{slot_index}\n")
 
         else:
             self.msg = QMessageBox()
