@@ -1,3 +1,7 @@
+> [!WARNING]
+> **This manual is out of date as of September 2026.** It describes an earlier version of the plugin, before a large
+> restructuring (new calibration workflow, layer navigation buttons and keyboard shortcuts,
+> redesigned CSV export, and more). It's kept here for reference only.
 
 # User's manual
 
