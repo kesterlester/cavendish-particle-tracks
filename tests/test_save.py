@@ -22,15 +22,16 @@ def test_cant_save_empty(cpt_widget, capsys):
 
 
 @pytest.mark.parametrize(
-    "file_name, expect_data_loaded",
+    "file_name, expect_data_loaded, rejection_reason",
     [
-        ("my_file.csv", True),
-        ("my_file.pkl", True),
-        ("my_file.pdf", False),
+        ("my_file.csv", True, None),
+        # .pkl saving is deliberately disabled for now (ENABLE_PICKLE = False)
+        ("my_file.pkl", False, "pickle_disabled"),
+        ("my_file.pdf", False, "invalid_file_type"),
     ],
 )
 def test_save_single_particle(
-    cpt_widget, tmp_path, qtbot: QtBot, file_name, expect_data_loaded
+    cpt_widget, tmp_path, qtbot: QtBot, capsys, file_name, expect_data_loaded, rejection_reason
 ):
     # start napari and the particle widget, add a single particle
     cpt_widget.particle_decays_menu.setCurrentIndex(1)  # select the Σ
@@ -74,13 +75,16 @@ def test_save_single_particle(
 
         saved_file_is_not_empty = stat(saved_file).st_size != 0
         assert saved_file_is_not_empty, f"File {saved_file} is empty"
-    else:
+    elif rejection_reason == "invalid_file_type":
         msgbox = cpt_widget.msg
         assert isinstance(msgbox, QMessageBox)
         assert msgbox.icon() == QMessageBox.Warning
         assert msgbox.text() == (
             "The file must be a CSV (*.csv) or Pickle (*.pkl) file. Please try again."
         )
+    elif rejection_reason == "pickle_disabled":
+        captured = capsys.readouterr()
+        assert "Saving as .pkl is currently disabled" in captured.out
 
 
 def test_csv_file_has_correct_columns(cpt_widget, tmp_path, qtbot: QtBot):

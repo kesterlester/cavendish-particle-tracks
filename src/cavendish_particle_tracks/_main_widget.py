@@ -33,14 +33,17 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, QSettings
 from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager, GENERIC_CALIBRATION_LAYER_NAME, PER_IMAGE_CALIBRATION_LAYER_NAME
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, CSV_COLUMNS, round_px, round_angle
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, CSV_COLUMNS, round_px, round_angle, load_csv_session
 
 ENABLE_MAG = False
+# Session files are CSV-only for now - flip this back to True to restore .pkl support.
+# Underlying save/load logic is untouched, just gated behind this flag.
+ENABLE_PICKLE = False
 
 MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
 OTHER_PROCESSES_LAYER_NAME = "Other Processes (view only)"
@@ -95,6 +98,15 @@ class ParticleTracksWidget(QWidget):
 
         # In normal operation: the user is forced to load data before they can do anything.
         self.bypass_force_load_data = get_bypass()
+        # "Load images" persists across restarts (via QSettings - a plist on macOS, the registry
+        # on Windows, a config file on Linux, handled automatically) since every student loads
+        # from the same shared data folder, so remembering it is a genuine convenience with no
+        # downside. Save/load process table deliberately do NOT use QSettings - they're
+        # per-student work, so they use a plain in-memory attribute instead, cleared automatically
+        # the moment the app closes.
+        self._settings = QSettings("CavendishLab", "ParticleTracks")
+        self._last_load_process_table_dir = "./"
+        self._last_save_process_table_dir = "./"
 
         self.docking_area = docking_area
 
@@ -500,6 +512,12 @@ class ParticleTracksWidget(QWidget):
             self.table.setColumnWidth(name_idx, 140)
             self.table.setColumnWidth(event_number_idx, 140)
 
+    def _display_value(self, value) -> str:
+        """Render a measurement value for a table cell blank instead of text "None"."""
+        if value is None:
+            return ""
+        return str(value)
+
     def _get_table_column_index(self, columntext: str) -> int:
         """Given a column title, return the column index in the table"""
         for i, item in enumerate(self.columns):
@@ -529,6 +547,45 @@ class ParticleTracksWidget(QWidget):
         for i, particle in enumerate(self.data):
             self.table.insertRow(i)
             self._add_or_update_table_row(i, particle)
+        self._refresh_all_measurement_cells()
+
+    def _refresh_summary_cells_for_row(self, row_index: int) -> None:
+        """Populate one row's summary radius_px/decay_length_px/phi_proton/phi_pion cells, from
+        whichever view is currently displayed - the same "current view" reading
+        _sync_measurement_layer_to_selected_process/_refresh_decay_angle_table_cells already use,
+        just directly parameterised by row instead of relying on row selection. No-ops for
+        CalibrationRow, which has no equivalent measurements at all.
+        """
+        particle = self.data[row_index]
+        if isinstance(particle, CalibrationRow):
+            return
+        current_view = self.viewer.dims.current_step[0]
+        view_data = particle.views[current_view]
+        self.table.setItem(
+            row_index, self._get_table_column_index("decay_length_px"),
+            QTableWidgetItem(self._display_value(round_px(view_data.length_px))),
+        )
+        self.table.setItem(
+            row_index, self._get_table_column_index("radius_px"),
+            QTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
+        )
+        self.table.setItem(
+            row_index, self._get_table_column_index("phi_proton"),
+            QTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
+        )
+        self.table.setItem(
+            row_index, self._get_table_column_index("phi_pion"),
+            QTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
+        )
+
+    def _refresh_all_measurement_cells(self) -> None:
+        """Populate every row's measurement cells (both the summary columns and the per-view
+        breakdown columns) at once - called right after rebuilding the table from a loaded
+        session, so values are visible immediately rather than only appearing lazily.
+        """
+        for row_index in range(len(self.data)):
+            self._refresh_summary_cells_for_row(row_index)
+            self._refresh_per_view_breakdown_cells(row_index)
 
     def _refresh_per_view_breakdown_cells(self, selected_row: int) -> None:
         """Refresh the 12 v1_/v2_/v3_ per-view breakdown columns for a row. Separate from the
@@ -546,7 +603,7 @@ class ParticleTracksWidget(QWidget):
                 self.table.setItem(
                     selected_row,
                     self._get_table_column_index(col_name),
-                    QTableWidgetItem(str(value)),
+                    QTableWidgetItem(self._display_value(value)),
                 )
 
     def _refresh_saved_vertices_cell(self, selected_row: int) -> None:
@@ -758,12 +815,12 @@ class ParticleTracksWidget(QWidget):
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("decay_length_px"),
-                QTableWidgetItem(str(round_px(view_data.length_px))),
+                QTableWidgetItem(self._display_value(round_px(view_data.length_px))),
             )
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("radius_px"),
-                QTableWidgetItem(str(round_px(view_data.radius_px))),
+                QTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
             )
         if selected_row is not None:
             self._refresh_per_view_breakdown_cells(selected_row)
@@ -877,12 +934,12 @@ class ParticleTracksWidget(QWidget):
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_proton"),
-            QTableWidgetItem(str(round_angle(view_data.phi_proton))),
+            QTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
         )
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_pion"),
-            QTableWidgetItem(str(round_angle(view_data.phi_pion))),
+            QTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
         )
         self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
@@ -998,12 +1055,12 @@ class ParticleTracksWidget(QWidget):
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_proton"),
-            QTableWidgetItem(str(round_angle(view_data.phi_proton))),
+            QTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
         )
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_pion"),
-            QTableWidgetItem(str(round_angle(view_data.phi_pion))),
+            QTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
         )
         self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
@@ -1042,16 +1099,15 @@ class ParticleTracksWidget(QWidget):
 
     def _on_click_load(self) -> None:
         """Restore a previously saved session (process rows, calibration rows, and generic fiducial
-        templates) from a .pkl file, replacing whatever's currently in the table. Only .pkl is
-        supported - CSV is a lossy, display-only format (e.g. the views field doesn't round-trip
-        through it at all), so it was never meant to be loaded back in.
+        templates) from a .pkl or .csv file, replacing whatever's currently in the table. CSV
+        loading reconstructs the same (data, generic_templates) shape .pkl loading already
+        produces (see load_csv_session), so everything below this point is fully format-agnostic.
         """
         if IMAGE_LAYER_NAME not in self.viewer.layers:
             napari.utils.notifications.show_error(
                 "Load images first - the event/view slots a saved session refers to don't exist until then."
             )
             return
-
         if self.dirty_things():
             confirmation_dialog = QMessageBox()
             confirmation_dialog.setText("Loading will discard the current, unsaved session.")
@@ -1060,37 +1116,42 @@ class ParticleTracksWidget(QWidget):
             confirmation_dialog.setDefaultButton(QMessageBox.Cancel)
             if confirmation_dialog.exec() != QMessageBox.Yes:
                 return
-
-        file_name, _ = QFileDialog.getOpenFileName(
+        file_name, selected_filter = QFileDialog.getOpenFileName(
             self,
             "Load file",
-            "./",
-            "Pickle files (*.pkl)",
+            self._last_load_process_table_dir,
+            "Pickle files (*.pkl);;CSV files (*.csv)" if ENABLE_PICKLE else "CSV files (*.csv)",
             "",
             QFileDialog.DontUseNativeDialog,
         )
-
         if file_name in {"", None}:
             return
-
+        self._last_load_process_table_dir = os.path.dirname(file_name)
         if os.path.splitext(file_name)[1] == "":
-            file_name += ".pkl"
-
+            file_name += ".csv" if "csv" in selected_filter.lower() else ".pkl"
         try:
-            with open(file_name, "rb") as handle:
-                session = pickle.load(handle)
+            if file_name.endswith(".csv"):
+                data, generic_templates = load_csv_session(file_name)
+            else:
+                if not ENABLE_PICKLE:
+                    napari.utils.notifications.show_error(
+                        "Loading .pkl files is currently disabled - please load a .csv file instead."
+                    )
+                    return
+                with open(file_name, "rb") as handle:
+                    session = pickle.load(handle)
+                data, generic_templates = session.data, session.generic_templates
         except Exception as e:
             napari.utils.notifications.show_error(f"Could not load {file_name}: {e}")
             return
-
         self.table.clearSelection()
-        self.data = session.data
+        self.data = data
         self._rebuild_table_from_data()
-
-        # Restore calibration: generic templates come straight from the saved session; event_views
-        # is rebuilt from the just-restored CalibrationRow entries rather than also saved separately,
-        # so there's only ever one copy of per-event stamp data to keep consistent.
-        self.calibration_manager.calibration_data.generic_templates = session.generic_templates
+        # Restore calibration: generic templates come straight from the loaded session;
+        # event_views is rebuilt from the just-restored CalibrationRow entries rather than also
+        # loaded separately, so there's only ever one copy of per-event stamp data to keep
+        # consistent.
+        self.calibration_manager.calibration_data.generic_templates = generic_templates
         self.calibration_manager.calibration_data.event_views = {}
         for particle in self.data:
             if isinstance(particle, CalibrationRow):
@@ -1098,15 +1159,13 @@ class ParticleTracksWidget(QWidget):
                     if view_data.stamped:
                         self.calibration_manager.calibration_data.event_views[
                             (particle.event_number, view_index)] = view_data
-
-        self.calibration_manager._restore_generic_calibration_layers(session.generic_templates)
+        self.calibration_manager._restore_generic_calibration_layers(generic_templates)
         self.calibration_manager._restore_event_calibration_layer()
         # Same reasoning as the __init__-time fix: without re-marking clean here, the calibration
         # dirty-check baseline stays stale relative to what was just loaded.
         self.calibration_manager.mark_clean()
         # refresh_symbol_sizes() is otherwise only triggered by a zoom event.
         self.calibration_manager.refresh_symbol_sizes()
-
         import copy
         self._data_at_last_save = copy.deepcopy(self.data)  # a freshly loaded session isn't "dirty"
 
@@ -1125,13 +1184,14 @@ class ParticleTracksWidget(QWidget):
         folder_name = test_file_dialog.getExistingDirectory(
             self,
             "Choose folder",
-            "./",
+            self._settings.value("last_load_images_dir", "./"),
             QFileDialog.DontUseNativeDialog
             | QFileDialog.DontResolveSymlinks
             | QFileDialog.ShowDirsOnly
             | QFileDialog.HideNameFilterDetails,
         )
-
+        if folder_name not in {"", None}:
+            self._settings.setValue("last_load_images_dir", folder_name)
         self._load_data_from(folder_name)
 
     def _load_data_from(self, folder_name):
@@ -1429,12 +1489,12 @@ class ParticleTracksWidget(QWidget):
         self.table.setItem(
             selected_row,
             self._get_table_column_index("decay_length_px"),
-            QTableWidgetItem(str(round_px(view_data.length_px))),
+            QTableWidgetItem(self._display_value(round_px(view_data.length_px))),
         )
         self.table.setItem(
             selected_row,
             self._get_table_column_index("radius_px"),
-            QTableWidgetItem(str(round_px(view_data.radius_px))),
+            QTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
         )
         self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
@@ -1621,14 +1681,14 @@ class ParticleTracksWidget(QWidget):
         file_name, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Save file",
-            "./",
-            "Pickle files (*.pkl);;CSV files (*.csv)",
-            "Pickle files (*.pkl)",
+            self._last_save_process_table_dir,
+            "Pickle files (*.pkl);;CSV files (*.csv)" if ENABLE_PICKLE else "CSV files (*.csv)",
+            "Pickle files (*.pkl)" if ENABLE_PICKLE else "CSV files (*.csv)",
             QFileDialog.DontUseNativeDialog,
         )
-
         if file_name in {"", None}:
             return
+        self._last_save_process_table_dir = os.path.dirname(file_name)
 
         # Only fill in a missing extension - an explicitly wrong one (e.g. someone typing "myfile.pdf")
         # should still fall through to the "invalid file type" branch below, not get silently coerced
@@ -1638,6 +1698,11 @@ class ParticleTracksWidget(QWidget):
 
         # Save as pickle if file_name ends with .pkl
         if file_name.endswith(".pkl"):
+            if not ENABLE_PICKLE:
+                napari.utils.notifications.show_error(
+                    "Saving as .pkl is currently disabled - please save as .csv instead."
+                )
+                return
             session = SavedSession(data=self.data, generic_templates=generic_templates)
             with open(file_name, "wb") as handle:
                 pickle.dump(session, handle, protocol=pickle.HIGHEST_PROTOCOL)

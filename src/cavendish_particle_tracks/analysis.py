@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-
 import numpy as np
+import pandas as pd
 
 CHAMBER_DEPTH = 31.6  # cm
 
@@ -145,6 +145,116 @@ def pack_decay_angle_lines(lines) -> str:
         point_strs = [f"{round_px(p[0])} {round_px(p[1])}" for p in line]
         parts.append("|".join(point_strs))
     return ";".join(parts)
+
+
+def _unpack_decay_angle_lines(raw: str):
+    """Inverse of pack_decay_angle_lines. Returns None for a blank string."""
+    if not raw or (isinstance(raw, float) and pd.isna(raw)):
+        return None
+    lines = []
+    for line_str in raw.split(";"):
+        points = []
+        for point_str in line_str.split("|"):
+            x_str, y_str = point_str.split(" ")
+            points.append([float(x_str), float(y_str)])
+        lines.append(points)
+    return lines
+
+
+def _cell(row, col):
+    """A row's value for a column, or None if the cell is blank - pandas represents a blank
+    CSV cell as NaN (a float), not None or "", regardless of the column's usual dtype.
+    """
+    value = row[col]
+    if pd.isna(value):
+        return None
+    return value
+
+
+def load_csv_session(file_path):
+    """Parse a .csv file saved by the long-format CSV export (see CSV_COLUMNS/to_csv_rows) and
+    reconstruct the same (data, generic_templates) shape .pkl loading already produces - so
+    everything downstream of that point (rebuilding the table, restoring calibration layers) can
+    be reused unchanged regardless of which format a session was loaded from. Raises a plain
+    Exception with a descriptive message on any structural problem, which the caller displays
+    via the same error-handling path already used for a corrupt .pkl file.
+    """
+    with open(file_path, encoding="utf8") as f:
+        content = f.read()
+    chunks = content.strip("\n").split("\n\n")
+
+    main_df = pd.read_csv(pd.io.common.StringIO(chunks[0]), dtype={"name": str})
+    if list(main_df.columns) != CSV_COLUMNS:
+        raise ValueError(
+            "This file's columns don't match the expected format - it may not be a session "
+            "saved by this program, or may have been edited in a way that changed its structure."
+        )
+
+    data = []
+    for row_group_id, group in main_df.groupby("row_group_id", sort=True):
+        if len(group) != 3:
+            raise ValueError(
+                f"row_group_id {row_group_id} has {len(group)} rows instead of the expected 3 - "
+                "the file may be corrupted or have been edited incorrectly."
+            )
+        group = group.sort_values("view")
+        names = group["name"].unique()
+        event_numbers = group["event_number"].unique()
+        if len(names) != 1 or len(event_numbers) != 1:
+            raise ValueError(
+                f"row_group_id {row_group_id} has inconsistent name/event_number across its 3 rows."
+            )
+        name = names[0]
+        event_number = int(event_numbers[0])
+
+        if name == "Calibration":
+            particle = CalibrationRow(event_number=event_number)
+            for view_index, (_, row) in enumerate(group.iterrows()):
+                view_data = particle.views[view_index]
+                for fiducial_name in FIDUCIAL_NAMES:
+                    x = _cell(row, f"{fiducial_name}_x")
+                    y = _cell(row, f"{fiducial_name}_y")
+                    if x is not None and y is not None:
+                        view_data.stamp(fiducial_name, [x, y])
+        else:
+            indices = group["index"].unique()
+            if len(indices) != 1:
+                raise ValueError(f"row_group_id {row_group_id} has inconsistent index across its 3 rows.")
+            index = int(indices[0])
+            particle = ParticleDecay(name=EXPECTED_PROCESSES_NICE[index], index=index, event_number=event_number)
+            for view_index, (_, row) in enumerate(group.iterrows()):
+                view_data = particle.views[view_index]
+                origin_x, origin_y = _cell(row, "origin_x"), _cell(row, "origin_y")
+                if origin_x is not None and origin_y is not None:
+                    view_data.set_origin([origin_x, origin_y])
+                decay_x, decay_y = _cell(row, "decay_x"), _cell(row, "decay_y")
+                if decay_x is not None and decay_y is not None:
+                    view_data.set_decay([decay_x, decay_y])
+                track1_x = _cell(row, "track1_x")
+                if track1_x is not None:
+                    view_data.set_track_points([
+                        [track1_x, _cell(row, "track1_y")],
+                        [_cell(row, "track2_x"), _cell(row, "track2_y")],
+                        [_cell(row, "track3_x"), _cell(row, "track3_y")],
+                    ])
+                lines_raw = _cell(row, "decay_angle_lines_raw")
+                if lines_raw is not None:
+                    view_data.set_decay_angle_lines(_unpack_decay_angle_lines(lines_raw))
+        data.append(particle)
+
+    generic_templates = [GenericFiducialTemplate(), GenericFiducialTemplate(), GenericFiducialTemplate()]
+    if len(chunks) > 1:
+        fiducial_df = pd.read_csv(pd.io.common.StringIO(chunks[1]), dtype={"name": str})
+        for _, row in fiducial_df.iterrows():
+            view = int(row["view"])
+            slot_index = _cell(row, "slot_index")
+            generic_templates[view].set_position(
+                row["name"],
+                [row["x"], row["y"]],
+                slot_index=int(slot_index) if slot_index is not None else None,
+            )
+
+    return data, generic_templates
 
 
 _FIDUCIAL_CSV_COLUMNS = []
