@@ -463,14 +463,80 @@ class ParticleDecay:
             blocks.append(origin_char + decay_char + track_char + angle_char)
         return "  ".join(blocks)
 
-    def vars_to_show(self, calibrated=False):
+    # One property per (measurement, view) pair, purely for the live table's optional per-view
+    # breakdown columns - each just reads straight through to the real data already living in
+    # self.views, rounded for on-screen display the same way CSV export already is (round_px/
+    # round_angle). These are display-only computed properties, not real dataclass fields, so they
+    # have no effect on save/load.
+    @property
+    def v1_radius_px(self):
+        return round_px(self.views[0].radius_px)
+
+    @property
+    def v2_radius_px(self):
+        return round_px(self.views[1].radius_px)
+
+    @property
+    def v3_radius_px(self):
+        return round_px(self.views[2].radius_px)
+
+    @property
+    def v1_decay_length_px(self):
+        return round_px(self.views[0].length_px)
+
+    @property
+    def v2_decay_length_px(self):
+        return round_px(self.views[1].length_px)
+
+    @property
+    def v3_decay_length_px(self):
+        return round_px(self.views[2].length_px)
+
+    @property
+    def v1_phi_proton(self):
+        return round_angle(self.views[0].phi_proton)
+
+    @property
+    def v2_phi_proton(self):
+        return round_angle(self.views[1].phi_proton)
+
+    @property
+    def v3_phi_proton(self):
+        return round_angle(self.views[2].phi_proton)
+
+    @property
+    def v1_phi_pion(self):
+        return round_angle(self.views[0].phi_pion)
+
+    @property
+    def v2_phi_pion(self):
+        return round_angle(self.views[1].phi_pion)
+
+    @property
+    def v3_phi_pion(self):
+        return round_angle(self.views[2].phi_pion)
+
+    def vars_to_show(self, show_per_view=False):
+        # The old "calibrated" parameter was already unused/dead (vars_to_show() ignored it and
+        # always returned the same list) - repurposed here for the per-view breakdown toggle
+        # instead of adding a second, parallel mechanism.
+        if show_per_view:
+            return [
+                "event_number",
+                "name",
+                "v1_radius_px", "v2_radius_px", "v3_radius_px",
+                "v1_decay_length_px", "v2_decay_length_px", "v3_decay_length_px",
+                "v1_phi_proton", "v2_phi_proton", "v3_phi_proton",
+                "v1_phi_pion", "v2_phi_pion", "v3_phi_pion",
+                "saved_vertices",
+            ]
         return [
             "event_number",
             "name",
             "radius_px",
             "decay_length_px",
-            #"origin_vertex_depth_cm",
-            #"decay_vertex_depth_cm",
+            # "origin_vertex_depth_cm",
+            # "decay_vertex_depth_cm",
             # "magnification",
             "phi_proton",
             "phi_pion",
@@ -480,8 +546,14 @@ class ParticleDecay:
     def vars_to_save(self):
         """Variable to save in the output file, all for the moment"""
         vars_to_save = [var for var in self.__dict__ if var[0] != "_"]
-        #vars_to_save += ["origin_vertex_depth_cm", "decay_vertex_depth_cm"]
-        vars_to_save += ["rpoints", "dpoints", "saved_vertices"]
+        # vars_to_save += ["origin_vertex_depth_cm", "decay_vertex_depth_cm"]
+        vars_to_save += [
+            "rpoints", "dpoints", "saved_vertices",
+            "v1_radius_px", "v2_radius_px", "v3_radius_px",
+            "v1_decay_length_px", "v2_decay_length_px", "v3_decay_length_px",
+            "v1_phi_proton", "v2_phi_proton", "v3_phi_proton",
+            "v1_phi_pion", "v2_phi_pion", "v3_phi_pion",
+        ]
         # vars_to_save += ["origin_v0_x"]
         # vars_to_save += ["origin_v0_y"]
         # vars_to_save += ["origin_v1_x"]

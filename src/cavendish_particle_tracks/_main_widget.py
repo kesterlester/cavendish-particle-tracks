@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -37,7 +38,7 @@ from ._settings import get_bypass, get_shuffling_seed
 # from ._stereoshift_dialog import StereoshiftDialog
 from ._calibration_manager import CalibrationManager, GENERIC_CALIBRATION_LAYER_NAME, PER_IMAGE_CALIBRATION_LAYER_NAME
 from .intercept_close import InterceptClose
-from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, CSV_COLUMNS, round_px
+from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, CSV_COLUMNS, round_px, round_angle
 
 ENABLE_MAG = False
 
@@ -114,6 +115,11 @@ class ParticleTracksWidget(QWidget):
         self.show_all_processes_checkbox.setChecked(False)
         self.show_fiducials_checkbox = QCheckBox("Show fiducial markers")
         self.show_fiducials_checkbox.setChecked(True)
+        self.show_per_view_columns_checkbox = QCheckBox("Show per-view breakdown")
+        self.show_per_view_columns_checkbox.setChecked(False)
+        self.show_per_view_columns_checkbox.stateChanged.connect(
+            lambda _: self._set_table_visible_vars(self.show_per_view_columns_checkbox.isChecked())
+        )
         # Created here (early), not down near the rest of the Layers panel setup - this needs to
         # exist before set_UI_image_loaded() runs for the first time, a few lines below, the same
         # constraint the checkbox it replaces was already satisfying by being created this early.
@@ -174,10 +180,17 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.setColumnStretch(0, 1)
             self.buttonbox.setColumnStretch(1, 1)
 
+            table_container = QWidget()
+            table_container_layout = QVBoxLayout()
+            table_container_layout.setContentsMargins(0, 0, 0, 0)
+            table_container.setLayout(table_container_layout)
+            table_container_layout.addWidget(self.show_per_view_columns_checkbox)
+            table_container_layout.addWidget(self.table)
+
             layout_outer = QHBoxLayout()
             self.setLayout(layout_outer)
             layout_outer.addLayout(self.buttonbox)
-            self.layout().addWidget(self.table)
+            self.layout().addWidget(table_container)
             layout_outer.setStretch(0, 0)  # button panel stays at its natural size
             layout_outer.setStretch(1, 1)  # table absorbs any extra width
 
@@ -190,6 +203,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_origin_decay_checkbox)
             self.buttonbox.addWidget(self.show_fiducials_checkbox)
             self.buttonbox.addWidget(self.show_all_processes_checkbox)
+            self.buttonbox.addWidget(self.show_per_view_columns_checkbox)
             self.buttonbox.addWidget(self.table)
             # self.buttonbox.addWidget(self.apply_magnification_button)
             # self.buttonbox.addWidget(self.stereoshift_button)
@@ -427,27 +441,64 @@ class ParticleTracksWidget(QWidget):
         """
         np = ParticleDecay()
         self.columns = list(np.vars_to_save())
-        # self.columns += ["magnification"]
-        self.columns_show_calibrated = np.vars_to_show(True)
-        self.columns_show_uncalibrated = np.vars_to_show(False)
+        self.columns_show_summary = np.vars_to_show(False)
+        self.columns_show_per_view = np.vars_to_show(True)
         out = QTableWidget(0, len(self.columns))
         out.setHorizontalHeaderLabels(self.columns)
         out.setSelectionBehavior(QAbstractItemView.SelectRows)
         out.setSelectionMode(QAbstractItemView.SingleSelection)
         out.setEditTriggers(QAbstractItemView.NoEditTriggers)
         out.setSelectionBehavior(QTableWidget.SelectRows)
-        out.horizontalHeader().setDefaultSectionSize(140)
+
+        # Summary-mode columns are never shown at the same time as the breakdown-mode ones, so
+        # each group can just get its own fixed width rule up front, with no "which mode is
+        # active" logic needed at all - the wrong group's columns are always hidden regardless.
+        wide_uniform_columns = ["event_number", "name", "radius_px", "decay_length_px", "phi_proton", "phi_pion"]
+        for col in wide_uniform_columns:
+            idx = self.columns.index(col)
+            out.setColumnWidth(idx, 140)
+            out.horizontalHeader().setSectionResizeMode(idx, QHeaderView.Fixed)
+
+        # The 12 per-view breakdown columns are only ever shown all at once, so a narrower,
+        # content-fitted width suits them better - their header text (e.g. "v1_decay_length_px")
+        # is the actual limiting factor here, not their short, already-rounded numeric content.
+        fm = out.fontMetrics()
+        for view_number in (1, 2, 3):
+            for base_col in ("radius_px", "decay_length_px", "phi_proton", "phi_pion"):
+                col = f"v{view_number}_{base_col}"
+                idx = self.columns.index(col)
+                out.setColumnWidth(idx, fm.horizontalAdvance(col) + 24)
+                out.horizontalHeader().setSectionResizeMode(idx, QHeaderView.Fixed)
+
+        # saved_vertices is shared by both modes and can genuinely grow unpredictably in either
+        # one - starts at the same wide width as the summary columns, then adapts from there.
+        saved_vertices_idx = self.columns.index("saved_vertices")
+        out.setColumnWidth(saved_vertices_idx, 140)
+        out.horizontalHeader().setSectionResizeMode(saved_vertices_idx, QHeaderView.ResizeToContents)
         return out
 
-    def _set_table_visible_vars(self, calibrated) -> None:
+    def _set_table_visible_vars(self, show_per_view) -> None:
         for _ in range(len(self.columns)):
             self.table.setColumnHidden(_, True)
         show = (
-            self.columns_show_calibrated if calibrated else self.columns_show_uncalibrated
+            self.columns_show_per_view if show_per_view else self.columns_show_summary
         )
         show_index = [i for i, item in enumerate(self.columns) if item in set(show)]
         for _ in show_index:
             self.table.setColumnHidden(_, False)
+
+        # name/event_number are shared between both modes, but their ideal width differs - roomy
+        # to match the wide summary columns, snug to match the narrow breakdown columns.
+        fm = self.table.fontMetrics()
+        name_idx = self.columns.index("name")
+        event_number_idx = self.columns.index("event_number")
+        if show_per_view:
+            widest_name = max(["Calibration"] + EXPECTED_PROCESSES_NICE, key=len)
+            self.table.setColumnWidth(name_idx, fm.horizontalAdvance(widest_name) + 24)
+            self.table.setColumnWidth(event_number_idx, fm.horizontalAdvance("event_number") + 24)
+        else:
+            self.table.setColumnWidth(name_idx, 140)
+            self.table.setColumnWidth(event_number_idx, 140)
 
     def _get_table_column_index(self, columntext: str) -> int:
         """Given a column title, return the column index in the table"""
@@ -478,6 +529,25 @@ class ParticleTracksWidget(QWidget):
         for i, particle in enumerate(self.data):
             self.table.insertRow(i)
             self._add_or_update_table_row(i, particle)
+
+    def _refresh_per_view_breakdown_cells(self, selected_row: int) -> None:
+        """Refresh the 12 v1_/v2_/v3_ per-view breakdown columns for a row. Separate from the
+        existing current-view summary cell updates (left untouched), so both display modes stay
+        correct regardless of which one is currently toggled visible. No-ops for CalibrationRow,
+        which has no equivalent measurements at all.
+        """
+        particle = self.data[selected_row]
+        if isinstance(particle, CalibrationRow):
+            return
+        for view_number in (1, 2, 3):
+            for base_col in ("radius_px", "decay_length_px", "phi_proton", "phi_pion"):
+                col_name = f"v{view_number}_{base_col}"
+                value = getattr(particle, col_name)
+                self.table.setItem(
+                    selected_row,
+                    self._get_table_column_index(col_name),
+                    QTableWidgetItem(str(value)),
+                )
 
     def _refresh_saved_vertices_cell(self, selected_row: int) -> None:
         self.table.setItem(
@@ -688,14 +758,15 @@ class ParticleTracksWidget(QWidget):
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("decay_length_px"),
-                QTableWidgetItem(str(view_data.length_px)),
+                QTableWidgetItem(str(round_px(view_data.length_px))),
             )
             self.table.setItem(
                 selected_row,
                 self._get_table_column_index("radius_px"),
-                QTableWidgetItem(str(view_data.radius_px)),
+                QTableWidgetItem(str(round_px(view_data.radius_px))),
             )
         if selected_row is not None:
+            self._refresh_per_view_breakdown_cells(selected_row)
             self._refresh_saved_vertices_cell(selected_row)
 
         self._restyle_measurement_points()
@@ -795,10 +866,6 @@ class ParticleTracksWidget(QWidget):
         return [lambda_line, proton_line, pion_line]
 
     def _refresh_decay_angle_table_cells(self) -> None:
-        """Show whatever phi_proton/phi_pion the current view has stored,
-        independent of whether the diagram is actually visible right now -
-        mirrors how radius/length's cells already stay live on their own.
-        """
         try:
             selected_row = self._get_selected_row()
         except IndexError:
@@ -810,13 +877,14 @@ class ParticleTracksWidget(QWidget):
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_proton"),
-            QTableWidgetItem(str(view_data.phi_proton)),
+            QTableWidgetItem(str(round_angle(view_data.phi_proton))),
         )
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_pion"),
-            QTableWidgetItem(str(view_data.phi_pion)),
+            QTableWidgetItem(str(round_angle(view_data.phi_pion))),
         )
+        self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
 
     def _load_decay_angle_diagram_for_selected_process(self) -> None:
@@ -930,13 +998,14 @@ class ParticleTracksWidget(QWidget):
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_proton"),
-            QTableWidgetItem(str(view_data.phi_proton)),
+            QTableWidgetItem(str(round_angle(view_data.phi_proton))),
         )
         self.table.setItem(
             selected_row,
             self._get_table_column_index("phi_pion"),
-            QTableWidgetItem(str(view_data.phi_pion)),
+            QTableWidgetItem(str(round_angle(view_data.phi_pion))),
         )
+        self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
 
     def _enforce_decay_angle_lines_coincident(self, event=None) -> None:
@@ -1360,13 +1429,14 @@ class ParticleTracksWidget(QWidget):
         self.table.setItem(
             selected_row,
             self._get_table_column_index("decay_length_px"),
-            QTableWidgetItem(str(view_data.length_px)),
+            QTableWidgetItem(str(round_px(view_data.length_px))),
         )
         self.table.setItem(
             selected_row,
             self._get_table_column_index("radius_px"),
-            QTableWidgetItem(str(view_data.radius_px)),
+            QTableWidgetItem(str(round_px(view_data.radius_px))),
         )
+        self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
         self._restyle_measurement_points()
 
