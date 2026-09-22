@@ -251,11 +251,19 @@ class ParticleTracksWidget(QWidget):
             """When the layer list changes, update the button availability"""
             self.set_button_availability()
 
+        # calibration_manager must exist before any data folder is loaded - _load_data_from()
+        # calls into it (e.g. rebuild_generic_layer_for_event_count()) to size the generic
+        # calibration layers once the real per-event image count is known. This ordering used to
+        # be harmless (main's _load_data_from never touched calibration_manager), but became load
+        # -bearing once calibration awareness was added here - a caller that supplies data_folder=
+        # to the constructor (rather than loading via the Load button after the widget is fully
+        # built) would otherwise hit an AttributeError.
+        self._last_synced_dims = None
+        self.calibration_manager = CalibrationManager(self, self.viewer)
+
         if data_folder is not None:
             self._load_data_from(data_folder)
 
-        self._last_synced_dims = None
-        self.calibration_manager = CalibrationManager(self, self.viewer)
         self.viewer.dims.events.current_step.connect(self._sync_measurement_layer_to_selected_process)
         # Connected here, not up where the checkbox was created, since calibration_manager doesn't
         # exist yet at that point - connecting any earlier would crash the moment the checkbox's initial
