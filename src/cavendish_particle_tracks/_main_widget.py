@@ -760,8 +760,13 @@ class ParticleTracksWidget(QWidget):
                     length_points.append((current_view, current_event, *view_data.origin))
                 if view_data.decay is not None:
                     length_points.append((current_view, current_event, *view_data.decay))
-                for point in view_data.track_points:
-                    radius_points.append((current_view, current_event, *point))
+                # Only a COMPLETE set of 3 is an actual radius fit (matching
+                # ViewData._recompute_radius's own len==3 check) - 1 or 2 leftover track points,
+                # e.g. right after deleting one of 3 with napari's own delete tool, aren't a
+                # radius any more and must stop being coloured as one.
+                if len(view_data.track_points) == 3:
+                    for point in view_data.track_points:
+                        radius_points.append((current_view, current_event, *point))
 
         def matches(point, candidates):
             return any(
@@ -1552,7 +1557,8 @@ class ParticleTracksWidget(QWidget):
             view_data = particle.views[current_view]
 
             length_xy = {_as_xy(p) for p in (view_data.origin, view_data.decay) if p is not None}
-            radius_xy = {_as_xy(p) for p in view_data.track_points}
+            # Same "complete set of 3 only" rule as _restyle_measurement_points - see its comment.
+            radius_xy = {_as_xy(p) for p in view_data.track_points} if len(view_data.track_points) == 3 else set()
 
             for xy in length_xy | radius_xy:
                 is_length = xy in length_xy
