@@ -17,6 +17,7 @@ import numpy as np
 from dask_image.imread import imread
 from qtpy.QtWidgets import (
     QAbstractItemView,
+    QAction,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -24,6 +25,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QRadioButton,
@@ -350,6 +352,12 @@ class ParticleTracksWidget(QWidget):
         self.viewer.bind_key('h', lambda viewer: self._activate_layer(GENERIC_CALIBRATION_LAYER_NAME), overwrite=True)
         self.viewer.bind_key('j', lambda viewer: self._activate_layer(PER_IMAGE_CALIBRATION_LAYER_NAME), overwrite=True)
         self.viewer.bind_key('k', lambda viewer: self._activate_decay_angles_via_shortcut(), overwrite=True)
+        # Keyboard equivalents of the measurement layer's right-click menu (see
+        # _on_measurement_layer_right_click) - same actions, same preconditions, for anyone who'd
+        # rather not right-click every time.
+        self.viewer.bind_key('o', lambda viewer: self._record_origin_vertex(), overwrite=True)
+        self.viewer.bind_key('d', lambda viewer: self._record_decay_vertex(), overwrite=True)
+        self.viewer.bind_key('r', lambda viewer: self._record_radius(), overwrite=True)
 
     def _activate_decay_angles_via_shortcut(self) -> None:
         # Unlike a button click, calling _activate_layer directly would bypass the button's own
@@ -810,11 +818,13 @@ class ParticleTracksWidget(QWidget):
                 return  # clearing selection re-triggers this method itself
 
         existing_data = self.layer_measurements.data
-        other_slices = [
-            point
-            for point in existing_data
-            if not (point[0] == current_view and point[1] == current_event)
-        ]
+        other_slices = []
+        current_slice_existing = []
+        for point in existing_data:
+            if point[0] == current_view and point[1] == current_event:
+                current_slice_existing.append(point)
+            else:
+                other_slices.append(point)
 
         new_points = []
         view_data = None
@@ -833,19 +843,30 @@ class ParticleTracksWidget(QWidget):
             for xy in role_groups:
                 new_points.append([current_view, current_event, xy[0], xy[1]])
 
+        # A point on this slice that isn't (yet) tied to any role - freshly clicked, not yet
+        # recorded via the right-click menu / O/D/R shortcuts - must survive a routine rebuild.
+        # Selection is deliberately separate from action now: an unlabelled point can sit on the
+        # canvas indefinitely, and only a real delete (the 'x' tool, reconciled elsewhere) or a
+        # Record/Clear action may make one disappear, never just the View/Event slider moving.
+        orphan_points = [
+            point for point in current_slice_existing
+            if _as_xy(point[2:]) not in role_groups
+        ]
+
         # Rewriting .data here is our own routine canvas rebuild, not a real user action - guard it so
         # _on_measurement_points_changed doesn't treat this rebuild as evidence that points were deleted
         # (that reconciliation logic must only ever react to something the user actually did to the canvas).
         self._syncing = True
         try:
             self.layer_measurements.selected_data = set()
-            self.layer_measurements.data = other_slices + new_points
+            self.layer_measurements.data = other_slices + new_points + orphan_points
             self.layer_measurements.selected_data = set()
         finally:
             self._syncing = False
         self._last_synced_dims = (current_view, current_event)
         # Indices are into the freshly-assigned .data above: other_slices occupy [0, len(other_slices)),
-        # our own role-bearing points follow in the same order role_groups was built in.
+        # our own role-bearing points follow in the same order role_groups was built in, then the
+        # orphans - which intentionally get no entry here, since they carry no role to propagate.
         self._measurement_role_index_map = {
             len(other_slices) + i: roles for i, roles in enumerate(role_groups.values())
         }
@@ -1356,6 +1377,7 @@ class ParticleTracksWidget(QWidget):
             layer.events.data.connect(self._propagate_measurement_point_drag)
             layer.events.data.connect(self._on_measurement_points_changed)
             layer.events.highlight.connect(self._on_measurement_points_changed)
+            layer.mouse_drag_callbacks.append(self._on_measurement_layer_right_click)
             return layer
 
     def _setup_other_processes_layer(self):
@@ -1499,16 +1521,183 @@ class ParticleTracksWidget(QWidget):
                         updated_track_points[track_index] = new_xy
                         view_data.set_track_points(updated_track_points)
 
+    def _selected_measurement_target(self):
+        """The (row, ViewData) a measurement action should act on, or (None, None) if there's
+        nothing valid selected in the table right now - no process row selected, or a
+        CalibrationRow selected (which has no origin/decay/track measurements at all)."""
+        selected_row = self._get_selected_measurement_row()
+        if selected_row is None:
+            return None, None
+        current_view = self.viewer.dims.current_step[0]
+        return selected_row, self.data[selected_row].views[current_view]
+
+    def _selected_measurement_point_count(self) -> int:
+        """How many currently-selected canvas points are on the view/event on screen right now -
+        0 if the selection is empty or spans more than one slice. Used to decide which Record
+        actions the right-click menu should currently offer; unlike
+        _selected_points_are_on_current_slice, this never shows an error - it's queried on every
+        right-click just to build the menu, not only when the user has committed to an action.
+        """
+        selected_points = self._get_selected_points()
+        if len(selected_points) == 0:
+            return 0
+        current_step = self.viewer.dims.current_step
+        if not all(current_step[i] == point[i] for point in selected_points for i in (0, 1)):
+            return 0
+        return len(selected_points)
+
+    def _finish_measurement_action(self) -> None:
+        """Shared tail for every Record/Clear measurement action below: rebuild the canvas -
+        which also refreshes _measurement_role_index_map, stale otherwise and liable to break the
+        next drag on a point whose role just changed - and its table cells, then recolour to
+        match the new role assignment."""
+        self._sync_measurement_layer_to_selected_process()
+        self._restyle_measurement_points()
+
+    def _record_origin_vertex(self) -> None:
+        selected_row, view_data = self._selected_measurement_target()
+        if selected_row is None:
+            napari.utils.notifications.show_error("Select a process row before recording a vertex.")
+            return
+        selected_points = self._get_selected_points()
+        if len(selected_points) != 1:
+            napari.utils.notifications.show_error("Select exactly one point to record an origin vertex.")
+            return
+        if not self._selected_points_are_on_current_slice(selected_points):
+            return  # already showed its own error
+        view_data.set_origin(list(selected_points[0][2:]))
+        self._finish_measurement_action()
+
+    def _record_decay_vertex(self) -> None:
+        selected_row, view_data = self._selected_measurement_target()
+        if selected_row is None:
+            napari.utils.notifications.show_error("Select a process row before recording a vertex.")
+            return
+        selected_points = self._get_selected_points()
+        if len(selected_points) != 1:
+            napari.utils.notifications.show_error("Select exactly one point to record a decay vertex.")
+            return
+        if not self._selected_points_are_on_current_slice(selected_points):
+            return
+        view_data.set_decay(list(selected_points[0][2:]))
+        self._finish_measurement_action()
+
+    def _record_radius(self) -> None:
+        selected_row, view_data = self._selected_measurement_target()
+        if selected_row is None:
+            napari.utils.notifications.show_error("Select a process row before recording a radius.")
+            return
+        selected_points = self._get_selected_points()
+        if len(selected_points) != 3:
+            napari.utils.notifications.show_error("Select exactly three points to record a radius.")
+            return
+        if not self._selected_points_are_on_current_slice(selected_points):
+            return
+        view_data.set_track_points([list(p[2:]) for p in selected_points])
+        self._finish_measurement_action()
+
+    def _clear_origin_vertex(self) -> None:
+        selected_row, view_data = self._selected_measurement_target()
+        if selected_row is None:
+            napari.utils.notifications.show_error("Select a process row before clearing a vertex.")
+            return
+        if view_data.origin is None:
+            napari.utils.notifications.show_error("No origin vertex is currently recorded for this view.")
+            return
+        view_data.set_origin(None)
+        self._finish_measurement_action()
+
+    def _clear_decay_vertex(self) -> None:
+        selected_row, view_data = self._selected_measurement_target()
+        if selected_row is None:
+            napari.utils.notifications.show_error("Select a process row before clearing a vertex.")
+            return
+        if view_data.decay is None:
+            napari.utils.notifications.show_error("No decay vertex is currently recorded for this view.")
+            return
+        view_data.set_decay(None)
+        self._finish_measurement_action()
+
+    def _clear_radius(self) -> None:
+        selected_row, view_data = self._selected_measurement_target()
+        if selected_row is None:
+            napari.utils.notifications.show_error("Select a process row before clearing a radius.")
+            return
+        if not view_data.track_points:
+            napari.utils.notifications.show_error("No radius is currently recorded for this view.")
+            return
+        view_data.set_track_points([])
+        self._finish_measurement_action()
+
+    def _on_measurement_layer_right_click(self, layer, event):
+        """Right-click drop-down menu for the measurement layer: lets the user choose what a
+        selection of points means (origin vertex, decay vertex, or radius fit) instead of that
+        being decided implicitly by how many points happen to be selected. That old behaviour
+        punished anyone who could only reach a 3-point selection by ctrl-clicking one point at a
+        time - the moment their selection passed through 2 points on its way to 3, it would
+        already have been recorded as a length they never asked for.
+
+        Only triggers when the right-click lands on one of the CURRENTLY SELECTED points, the
+        usual "act on the selection" convention (file managers, word processors, ...) - selection
+        and action are deliberately separate operations here, exactly as in those.
+        """
+        our_sort_of_event = event.type == "mouse_press" and event.button == 2
+        if not our_sort_of_event:
+            return
+
+        coords = layer.world_to_data(event.position)
+
+        while event.type != "mouse_release":
+            yield
+
+        index_under_cursor = layer.get_value(coords, world=True)
+        if index_under_cursor is None or index_under_cursor not in layer.selected_data:
+            return
+
+        menu = QMenu(self.viewer.window._qt_window)
+
+        header = QAction("Measurement actions:", menu)
+        header.setEnabled(False)
+        font = header.font()
+        font.setBold(True)
+        header.setFont(font)
+        menu.addAction(header)
+        menu.addSeparator()
+
+        selected_row, view_data = self._selected_measurement_target()
+        point_count = self._selected_measurement_point_count()
+        have_target = selected_row is not None
+
+        def add_action(label: str, enabled: bool, callback) -> None:
+            action = QAction(label, menu)
+            action.setEnabled(enabled)
+            if enabled:
+                action.triggered.connect(lambda _, cb=callback: cb())
+            menu.addAction(action)
+
+        add_action("Record origin vertex   (O)", have_target and point_count == 1, self._record_origin_vertex)
+        add_action("Record decay vertex   (D)", have_target and point_count == 1, self._record_decay_vertex)
+        add_action("Record radius   (R)", have_target and point_count == 3, self._record_radius)
+        menu.addSeparator()
+        add_action("Clear origin vertex", have_target and view_data.origin is not None, self._clear_origin_vertex)
+        add_action("Clear decay vertex", have_target and view_data.decay is not None, self._clear_decay_vertex)
+        add_action("Clear radius", have_target and bool(view_data.track_points), self._clear_radius)
+
+        menu.exec_(event.native.globalPos())
+        event.handled = True
+
     def _on_measurement_points_changed(self, event=None) -> None:
         """Live auto-calculation and cleanup - fires whenever a point on the measurement
         layer is placed, dragged, removed, or (re)selected.
 
-        First, reconciles deletions: if a point that used to be part of this view's saved
+        Reconciles deletions: if a point that used to be part of this view's saved
         origin/decay/track data is no longer on the canvas (e.g. selected and deleted with
         the 'x' tool), clears it from the stored data too.
 
-        Then, if exactly 2 or 3 points are currently selected (and all on the current View/Event
-        slice), treats them as a fresh origin/decay pair or radius fit and saves that instead.
+        Deciding what a *new* selection means (an origin vertex, a decay vertex, a radius fit)
+        is handled explicitly instead, via the right-click menu / keyboard shortcuts - see
+        _on_measurement_layer_right_click and the Record/Clear methods above it. This method no
+        longer reacts to selection counts at all.
         """
         if getattr(self, "_restyling", False) or getattr(self, "_syncing", False):
             return
@@ -1554,21 +1743,6 @@ class ParticleTracksWidget(QWidget):
         remaining_track_points = [p for p in view_data.track_points if _as_xy(p) in current_xy_on_canvas]
         if len(remaining_track_points) != len(view_data.track_points):
             view_data.set_track_points(remaining_track_points)
-
-        selected_points = self._get_selected_points()
-        if len(selected_points) in (2, 3):
-            on_current_slice = all(
-                self.viewer.dims.current_step[i] == point[i]
-                for point in selected_points
-                for i in (0, 1)
-            )
-            if on_current_slice:
-                selected_points_xy = [point[2:] for point in selected_points]
-                if len(selected_points_xy) == 2:
-                    view_data.set_origin(list(selected_points_xy[0]))
-                    view_data.set_decay(list(selected_points_xy[1]))
-                else:
-                    view_data.set_track_points([list(p) for p in selected_points_xy])
 
         self.table.setItem(
             selected_row,
