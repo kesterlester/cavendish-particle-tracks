@@ -831,6 +831,41 @@ class ParticleTracksWidget(QWidget):
 
         self._refresh_radius_arc()
 
+    def _points_claimed_by_other_processes(self, selected_row, current_view, current_event) -> set[tuple[float, float]]:
+        """The coordinates every OTHER process (not `selected_row`) has already recorded a role
+        for, in this exact (view, event) - origin/decay/track points, from _measurement_roles.
+
+        CROSS-PROCESS ISOLATION INVARIANT (load-bearing - preserve this call across any future
+        refactor of how the canvas is rendered, not just an incidental implementation detail):
+        a canvas point already claimed by a DIFFERENT process must never be offered to the user
+        as if it were free ("an orphan", ripe for the right-click menu / O-D-R shortcuts) just
+        because they happen to be looking at a different process right now. Each process's roles
+        already live in their own fully independent ViewData - _sync_measurement_layer_to_selected_process
+        and _propagate_measurement_point_drag only ever read/write self.data[selected_row], so one
+        process's DATA can never be corrupted by editing another's (see feedback_gui_race_conditions
+        memory for the broader architecture note this belongs to). But CLAIMING an already-claimed
+        point is a USER ACTION, not a data race, and nothing stops a user from doing that by
+        accident if the display can't tell them apart from a genuinely free point - found live: a
+        point recorded as process 1's origin silently looked, to process 2, exactly like an
+        unclaimed point sitting on the same (view, event), and got recorded as process 2's radius
+        point too, without the user realising the point was already spoken for.
+
+        The two processes' data staying independent afterwards is fine, arguably even correct
+        (see the discussion this invariant came from) - what's not fine is the user not knowing
+        they'd just done it. This is the ONE call site responsible for preventing it: any
+        rendering path that decides what counts as an "unclaimed" point on the canvas must
+        consult this, not just the selected process's own roles.
+        """
+        claimed: set[tuple[float, float]] = set()
+        for i, particle in enumerate(self.data):
+            if i == selected_row or isinstance(particle, CalibrationRow):
+                continue
+            if particle.event_number != current_event:
+                continue
+            for _, point in _measurement_roles(particle.views[current_view]):
+                claimed.add(_as_xy(point))
+        return claimed
+
     def _sync_measurement_layer_to_selected_process(self, event=None) -> None:
         """Make the on-canvas origin/decay/track points reflect whichever process is selected in
         the table, for the view+event currently on screen, and refresh the table's radius/length
@@ -894,9 +929,17 @@ class ParticleTracksWidget(QWidget):
         # Selection is deliberately separate from action now: an unlabelled point can sit on the
         # canvas indefinitely, and only a real delete (the 'x' tool, reconciled elsewhere) or a
         # Record/Clear action may make one disappear, never just the View/Event slider moving.
+        # Excludes points already claimed by a DIFFERENT process in this (view, event) - see
+        # _points_claimed_by_other_processes's docstring for why this exclusion is load-bearing,
+        # not incidental: without it, another process's own recorded point is indistinguishable
+        # from a genuinely free one, and can get silently claimed a second time by accident.
+        claimed_by_other_processes = self._points_claimed_by_other_processes(
+            selected_row, current_view, current_event
+        )
         orphan_points = [
             point for point in current_slice_existing
             if _as_xy(point[2:]) not in role_groups
+            and _as_xy(point[2:]) not in claimed_by_other_processes
         ]
 
         # Rewriting .data here is our own routine canvas rebuild, not a real user action - guard it so
