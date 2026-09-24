@@ -55,11 +55,6 @@ def radius_arc_points(a: Point, b: Point, c: Point, num_segments: int = 40) -> l
     round to the one at the other extreme, passing through the middle one, not the long way round.
     Falls back to a straight line through the two most distant of the 3 points when they're too
     close to collinear for a stable circle fit (see _RADIUS_ARC_STRAIGHT_LINE_THRESHOLD).
-
-    Assumes the 3 points span less than half the circle, which real track measurements always
-    will (they're 3 points along one continuous, gently-curving segment of a track, never a
-    substantial fraction of a full loop) - the "shortest arc between the extreme angles" logic
-    below doesn't handle a wider span correctly.
     """
     points = [a, b, c]
     pairs = [(a, b), (a, c), (b, c)]
@@ -81,8 +76,23 @@ def radius_arc_points(a: Point, b: Point, c: Point, num_segments: int = 40) -> l
     if not np.isfinite(r) or r > _RADIUS_ARC_STRAIGHT_LINE_THRESHOLD * max_pairwise_distance:
         return straight_line_fallback()
 
-    angles = sorted(np.arctan2(p[1] - yc, p[0] - xc) for p in points)
-    start_angle, end_angle = angles[0], angles[-1]
+    # np.arctan2 wraps at +/-pi, so a plain ascending sort is wrong whenever the 3 points'
+    # true angular span straddles that branch cut (e.g. angles 160, 180, -170 degrees are only
+    # 30 degrees apart going the short way, but a naive sort/min/max would compute a ~330 degree
+    # arc the WRONG way round the circle). Instead: find the largest of the 3 circular gaps
+    # between the sorted angles (wrapping the last gap back to the first) - that gap is the empty
+    # stretch of the circle with no data point in it, so the natural arc is everything EXCEPT it,
+    # regardless of where the branch cut happens to fall.
+    a0, a1, a2 = sorted(np.arctan2(p[1] - yc, p[0] - xc) for p in points)
+    gap_after_a0 = a1 - a0
+    gap_after_a1 = a2 - a1
+    gap_after_a2 = (a0 + 2 * np.pi) - a2  # wraps back round to a0
+    if gap_after_a2 >= gap_after_a0 and gap_after_a2 >= gap_after_a1:
+        start_angle, end_angle = a0, a2
+    elif gap_after_a0 >= gap_after_a1:
+        start_angle, end_angle = a1, a0 + 2 * np.pi
+    else:
+        start_angle, end_angle = a2, a1 + 2 * np.pi
     return [
         [xc + r * np.cos(t), yc + r * np.sin(t)]
         for t in np.linspace(start_angle, end_angle, num_segments)
