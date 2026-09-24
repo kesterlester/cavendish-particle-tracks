@@ -194,3 +194,46 @@ def test_drag_reflected_via_highlight_events_alone_no_changing_event(cpt_widget)
     assert view_data.decay == [3.0, 4.0]
     assert view_data.track_points[0] == [3.0, 4.0]
     assert view_data.track_points[2] == [9.0, 10.0]
+
+
+def test_drag_still_works_after_visiting_a_second_view(cpt_widget):
+    """Regression test for a real bug found live: _measurement_role_index_map_point_count used
+    to count points across the WHOLE layer (including other_slices - other views'/events' points,
+    carried over unchanged on every rebuild), while _propagate_measurement_point_drag compared it
+    against a count of the CURRENT SLICE only. The moment a second view held any points at all,
+    that mismatch made the first view's current-slice count permanently look smaller than the
+    (now inflated-by-the-other-view) "expected" total, so propagation concluded a deletion had
+    happened and permanently backed off for that view - confirmed live via the debug trace log,
+    which showed the same "slice point count dropped" skip repeating on every single drag frame.
+    """
+    cpt_widget.particle_decays_menu.setCurrentIndex(1)
+    cpt_widget.layer_measurements = cpt_widget._setup_measurement_layer()
+
+    cpt_widget.viewer.dims.set_current_step(0, 0)
+    cpt_widget.viewer.dims.set_current_step(1, 0)
+    view0 = cpt_widget.viewer.dims.current_step[0]
+    view_data_0 = cpt_widget.data[0].views[view0]
+    view_data_0.set_track_points([[0.0, 1.0], [1.0, 0.0], [0.0, -1.0]])
+    cpt_widget._sync_measurement_layer_to_selected_process()
+
+    # Visit a second view and put a role-bearing point there too.
+    cpt_widget.viewer.dims.set_current_step(0, 1)
+    view1 = cpt_widget.viewer.dims.current_step[0]
+    assert view1 != view0
+    view_data_1 = cpt_widget.data[0].views[view1]
+    view_data_1.set_origin([5.0, 5.0])
+    cpt_widget._sync_measurement_layer_to_selected_process()
+
+    # Back to the first view.
+    cpt_widget.viewer.dims.set_current_step(0, view0)
+    cpt_widget._sync_measurement_layer_to_selected_process()
+    assert cpt_widget.viewer.dims.current_step[0] == view0
+
+    track1_idx = _index_for_roles(cpt_widget._measurement_role_index_map, "track1")
+    cpt_widget.layer_measurements.data[track1_idx][2] = 99.0
+    cpt_widget.layer_measurements.data[track1_idx][3] = 88.0
+    cpt_widget._propagate_measurement_point_drag(_FakeDataChangedEvent([track1_idx], action="changed"))
+
+    assert view_data_0.track_points[1] == [99.0, 88.0]
+    assert len(view_data_0.track_points) == 3
+    assert view_data_0.radius_px is not None

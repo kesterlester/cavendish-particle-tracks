@@ -911,10 +911,15 @@ class ParticleTracksWidget(QWidget):
         self._measurement_role_index_map = {
             len(other_slices) + i: roles for i, roles in enumerate(role_groups.values())
         }
-        # How many points this slice held right after this rebuild - _propagate_measurement_point_drag
-        # compares the live count against this to tell "someone moved" from "someone got deleted"
-        # without needing to trust any particular event's semantics (see its docstring).
-        self._measurement_role_index_map_point_count = len(other_slices) + len(new_points) + len(orphan_points)
+        # How many points THIS SLICE (current view/event only, not other_slices' carried-over
+        # points from other views/events) held right after this rebuild -
+        # _propagate_measurement_point_drag compares the live current-slice count against this
+        # to tell "someone moved" from "someone got deleted" without needing to trust any
+        # particular event's semantics (see its docstring). Must stay slice-scoped to match what
+        # that comparison measures - counting other_slices here too previously made switching to
+        # a second view and back permanently disable drag propagation for the first one, since
+        # the "expected" total only ever grew from then on.
+        self._measurement_role_index_map_point_count = len(new_points) + len(orphan_points)
 
         if view_data is not None:
             self.table.setItem(
