@@ -98,6 +98,43 @@ def radius_arc_points(a: Point, b: Point, c: Point, num_segments: int = 40) -> l
         for t in np.linspace(start_angle, end_angle, num_segments)
     ]
 
+
+def origin_decay_arrow(
+    origin: Point,
+    decay: Point,
+    head_length_fraction: float = 0.2,
+    head_width_fraction: float = 0.6,
+) -> tuple[list[Point], list[Point]] | tuple[None, None]:
+    """The shaft (a 2-point line) and arrowhead (a 3-point triangle) of an arrow pointing from
+    the origin vertex to the decay vertex - showing which vertex is which without relying on
+    colour or text alone. The arrowhead's length is a FIXED FRACTION of the arrow's own length
+    (not a fixed pixel size), so it stays proportionally visible whether the decay length is
+    large or tiny, rather than swamping a short one or vanishing on a long one.
+
+    Returns (None, None) if origin and decay coincide (a zero-length arrow has no direction to
+    point in) - the degenerate case of a decay length of exactly zero.
+    """
+    ox, oy = origin
+    dx, dy = decay
+    arrow_length = np.hypot(dx - ox, dy - oy)
+    if arrow_length == 0:
+        return None, None
+
+    unit = np.array([(dx - ox) / arrow_length, (dy - oy) / arrow_length])
+    perpendicular = np.array([-unit[1], unit[0]])
+
+    head_length = arrow_length * head_length_fraction
+    head_width = head_length * head_width_fraction
+
+    tip = np.array([dx, dy])
+    base_center = tip - unit * head_length
+    base_a = base_center + perpendicular * (head_width / 2)
+    base_b = base_center - perpendicular * (head_width / 2)
+
+    shaft = [list(origin), list(base_center)]
+    head = [list(tip), list(base_a), list(base_b)]
+    return shaft, head
+
 # def magnification(front_fiducial_1: Fiducial, front_fiducial_2: Fiducial,
 #                   back_fiducial_1: Fiducial, back_fiducial_2: Fiducial):
 #     """
