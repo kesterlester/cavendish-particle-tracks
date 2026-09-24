@@ -114,6 +114,23 @@ def _measurement_roles(view_data) -> list[tuple[str, list[float]]]:
     return [(role, point) for role, point in roles if point is not None]
 
 
+def _role_symbol(is_origin: bool, is_decay: bool) -> str:
+    """The point SHAPE used to tell an origin vertex from a decay vertex apart at a glance -
+    unlike colour or text, unaffected by colourblindness, and (like the point's own size) capped
+    rather than growing without bound at high zoom, so it never obscures the underlying image.
+    "diamond" is the rare degenerate case of a single point being both at once (a decay length of
+    exactly zero) - everything else (a bare point, or one that's only part of a radius fit) stays
+    the plain default "disc", unchanged.
+    """
+    if is_origin and is_decay:
+        return "diamond"
+    if is_origin:
+        return "ring"
+    if is_decay:
+        return "triangle_up"
+    return "disc"
+
+
 def get_singleton(viewer=None, docking_area: str = "bottom", data_folder=None):
     """Return the singleton ParticleTracksWidget, creating it if necessary."""
     global _singleton_instance
@@ -736,6 +753,12 @@ class ParticleTracksWidget(QWidget):
         a length pair (origin/decay), a radius fit (three track points), both at once (rare), or
         neither (a stray leftover / unowned point, left at the default
         style). The dot's white fill never changes - only the border.
+
+        Also gives the origin and decay vertices their own distinct SHAPE (see _role_symbol) -
+        independent of, and in addition to, the colour above: colour says "which measurement(s)
+        does this point contribute to", shape says "is this specifically the origin or decay
+        vertex" - a point can be shape-distinct without being colour-distinct (an origin vertex
+        not yet paired with a decay one still needs to read as "the origin", even alone).
         """
         if MEASUREMENTS_LAYER_NAME not in self.viewer.layers:
             return
@@ -749,6 +772,10 @@ class ParticleTracksWidget(QWidget):
 
         length_points = []
         radius_points = []
+        # Kept separate from length_points (which only needs "is this part of the length pair at
+        # all" for colouring) - symbol assignment below needs to know WHICH of the two a point is.
+        origin_point = None
+        decay_point = None
         selected_row = self._get_selected_measurement_row()
 
         if selected_row is not None:
@@ -757,9 +784,11 @@ class ParticleTracksWidget(QWidget):
             if self.data[selected_row].event_number == current_event:
                 view_data = self.data[selected_row].views[current_view]
                 if view_data.origin is not None:
-                    length_points.append((current_view, current_event, *view_data.origin))
+                    origin_point = (current_view, current_event, *view_data.origin)
+                    length_points.append(origin_point)
                 if view_data.decay is not None:
-                    length_points.append((current_view, current_event, *view_data.decay))
+                    decay_point = (current_view, current_event, *view_data.decay)
+                    length_points.append(decay_point)
                 # Only a COMPLETE set of 3 is an actual radius fit (matching
                 # ViewData._recompute_radius's own len==3 check) - 1 or 2 leftover track points,
                 # e.g. right after deleting one of 3 with napari's own delete tool, aren't a
@@ -784,9 +813,14 @@ class ParticleTracksWidget(QWidget):
 
         border_colors = []
         sizes = []
+        symbols = []
         for point in data:
             is_length = matches(point, length_points)
             is_radius = matches(point, radius_points)
+            symbols.append(_role_symbol(
+                is_origin=origin_point is not None and matches(point, [origin_point]),
+                is_decay=decay_point is not None and matches(point, [decay_point]),
+            ))
             if is_length and is_radius:
                 border_colors.append(BOTH_COLOR)
             elif is_length:
@@ -818,8 +852,10 @@ class ParticleTracksWidget(QWidget):
             self.layer_measurements.border_color = border_colors
             self.layer_measurements.border_width = [DEFAULT_BORDER_WIDTH] * len(data)
             self.layer_measurements.size = sizes
+            self.layer_measurements.symbol = symbols
             self.layer_measurements.current_border_color = DEFAULT_BORDER_COLOR
             self.layer_measurements.current_border_width = DEFAULT_BORDER_WIDTH
+            self.layer_measurements.current_symbol = "disc"
             # Force the repaint explicitly, rather than relying on one of the assignments above
             # to trigger it as a side effect - with border_width now staying at a single uniform
             # value, napari may treat that particular assignment as a no-op and skip its own
@@ -1572,13 +1608,13 @@ class ParticleTracksWidget(QWidget):
         """Populate the read-only 'other processes' layer for the current
         view/event, excluding whichever process is selected (its points
         already live on the interactive layer - no need to duplicate them
-        here). Uses the same white-dot/coloured-ring look as the
-        interactive layer; the layer's own opacity is the only thing that
-        distinguishes 'theirs' from 'mine'.
+        here). Uses the same white-dot/coloured-ring/shaped look as the
+        interactive layer (colour, symbol - see _role_symbol); the layer's
+        own opacity is the only thing that distinguishes 'theirs' from 'mine'.
 
-        Points only, no decorators - see _setup_radius_arc_layer's design note for why (the arc,
-        and any future decorator, only ever renders for the SELECTED process right now, checkbox
-        or not) and how that should eventually generalise.
+        Per-POINT styling only, no separately-drawn decorators (an arc, or an O-D arrow) - see
+        _setup_radius_arc_layer's design note for why (those only ever render for the SELECTED
+        process right now, checkbox or not) and how that should eventually generalise.
         """
         if OTHER_PROCESSES_LAYER_NAME not in self.viewer.layers:
             return
@@ -1605,6 +1641,7 @@ class ParticleTracksWidget(QWidget):
         points = []
         border_colors = []
         sizes = []
+        symbols = []
         for i, particle in enumerate(self.data):
             if i == selected_row:
                 continue
@@ -1614,7 +1651,9 @@ class ParticleTracksWidget(QWidget):
                 continue
             view_data = particle.views[current_view]
 
-            length_xy = {_as_xy(p) for p in (view_data.origin, view_data.decay) if p is not None}
+            origin_xy = _as_xy(view_data.origin) if view_data.origin is not None else None
+            decay_xy = _as_xy(view_data.decay) if view_data.decay is not None else None
+            length_xy = {xy for xy in (origin_xy, decay_xy) if xy is not None}
             # Same "complete set of 3 only" rule as _restyle_measurement_points - see its comment.
             radius_xy = {_as_xy(p) for p in view_data.track_points} if len(view_data.track_points) == 3 else set()
 
@@ -1634,6 +1673,8 @@ class ParticleTracksWidget(QWidget):
                 points.append([current_view, current_event, xy[0], xy[1]])
                 border_colors.append(color)
                 sizes.append(NORMAL_SIZE if visible else HIDDEN_SIZE)
+                # Same shape distinction as _restyle_measurement_points - see _role_symbol.
+                symbols.append(_role_symbol(is_origin=xy == origin_xy, is_decay=xy == decay_xy))
 
         layer.data = points
         if points:
@@ -1641,6 +1682,7 @@ class ParticleTracksWidget(QWidget):
             layer.border_color = border_colors
             layer.border_width = [7] * len(points)
             layer.size = sizes
+            layer.symbol = symbols
 
     def _invalidate_measurement_role_index_map(self, event=None) -> None:
         """A structural change to the measurement layer - a point added or removed, as opposed
