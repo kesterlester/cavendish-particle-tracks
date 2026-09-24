@@ -1486,8 +1486,16 @@ class ParticleTracksWidget(QWidget):
         the canvas, so that method's own deletion-reconciliation (which compares stored vs
         on-canvas positions) correctly sees nothing missing, rather than mistaking this drag for
         a deletion of every role but one.
+
+        Reacts to "changing" (mid-drag, fired on every mouse-move frame) as well as "changed"
+        (drag-end) - not just the latter. _on_measurement_points_changed is also connected to
+        layer.events.highlight, which napari fires on every one of those same frames with no
+        action guard of its own; if this method waited for "changed" alone, reconcile would see
+        a stale stored position against the already-moved canvas on every single frame but the
+        last, and mistake the in-progress drag for a deletion - which is exactly what used to
+        happen: a shared point's radius role would vanish mid-drag, well before mouse-release.
         """
-        if event is None or event.action != "changed":
+        if event is None or event.action not in ("changing", "changed"):
             return
         if getattr(self, "_restyling", False) or getattr(self, "_syncing", False):
             return
