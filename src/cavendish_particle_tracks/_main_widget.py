@@ -44,7 +44,7 @@ from ._settings import get_bypass, get_shuffling_seed
 from ._calibration_manager import CalibrationManager, GENERIC_CALIBRATION_LAYER_NAME, PER_IMAGE_CALIBRATION_LAYER_NAME
 from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, CSV_COLUMNS, round_px, round_angle, load_csv_session
-from ._calculate import radius_arc_points
+from ._calculate import origin_decay_arrow, radius_arc_points
 
 ENABLE_MAG = False
 # Session files are CSV-only for now - flip this back to True to restore .pkl support.
@@ -56,12 +56,14 @@ OTHER_PROCESSES_LAYER_NAME = "Other Processes (view only)"
 ANGLES_LAYER_NAME = "Decay Angles Tool"
 IMAGE_LAYER_NAME = "Bubble Chamber Data"
 RADIUS_ARC_LAYER_NAME = "Radius Arc"
+ORIGIN_DECAY_ARROW_LAYER_NAME = "Origin-Decay Arrow"
 
 # Shared between _restyle_measurement_points, _sync_other_processes_layer and the radius-arc
 # layer, so a point's ring colour and the arc drawn through a radius fit always agree.
 LENGTH_COLOR = "cornflowerblue"
 RADIUS_COLOR = "mediumorchid"
 BOTH_COLOR = "slateblue"
+ARROW_COLOR = "limegreen"
 
 _singleton_instance = None
 
@@ -762,6 +764,15 @@ class ParticleTracksWidget(QWidget):
         """
         if MEASUREMENTS_LAYER_NAME not in self.viewer.layers:
             return
+        if getattr(self, "_restyling", False):
+            # Reentrant call: found live that mutating the arc/arrow overlay layers' own .data
+            # from within this same method (see the _refresh_radius_arc/_refresh_origin_decay_arrow
+            # calls below) can trigger a callback chain that calls straight back into this method
+            # before the outer call has finished - without this guard, that ran a second,
+            # interleaved copy of the whole recolour-and-redraw cycle on top of the first,
+            # doubling up the arc/arrow shapes (colours/symbols are idempotent under repeated
+            # assignment so that half was invisible; the Shapes layers' add-based content isn't).
+            return
 
         data = self.layer_measurements.data
         if len(data) == 0:
@@ -862,10 +873,15 @@ class ParticleTracksWidget(QWidget):
             # repaint, leaving the (correct) colour applied in data but not actually drawn until
             # something else forces a real re-slice (e.g. navigating to a different event and back).
             self.layer_measurements.refresh()
+            # Kept INSIDE the _restyling-guarded block, not after it: found live (via a debug
+            # trace showing a plain sync producing 4 arrow shapes instead of 2) that mutating the
+            # arc/arrow Shapes layers' own .data - remove_selected()/add() - can itself trigger a
+            # reentrant call back into this same method, and outside this guard nothing stopped
+            # that from running a second, interleaved clear-then-add cycle on top of the first.
+            self._refresh_radius_arc()
+            self._refresh_origin_decay_arrow()
         finally:
             self._restyling = False
-
-        self._refresh_radius_arc()
 
     def _points_claimed_by_other_processes(self, selected_row, current_view, current_event) -> set[tuple[float, float]]:
         """The coordinates every OTHER process (not `selected_row`) has already recorded a role
@@ -1478,6 +1494,7 @@ class ParticleTracksWidget(QWidget):
         self.layer_measurements = self._setup_measurement_layer()
         self._setup_other_processes_layer()
         self._setup_radius_arc_layer()
+        self._setup_origin_decay_arrow_layer()
 
         # Move bubble chamber layer to the bottom
         self.viewer.layers.move(self.viewer.layers.index(bubble_chamber_layer), 0)
@@ -1603,6 +1620,62 @@ class ParticleTracksWidget(QWidget):
 
         if arc_shape is not None:
             layer.add(arc_shape, shape_type="path")
+
+    def _setup_origin_decay_arrow_layer(self):
+        """A two-shape overlay (a line shaft plus a filled triangle arrowhead - see
+        _calculate.origin_decay_arrow) pointing from the currently selected process's origin
+        vertex to its decay vertex, in green - the length equivalent of the radius arc, showing
+        the two points are linked as one length measurement rather than two independently
+        recorded ones. Refreshed by _refresh_origin_decay_arrow, called from
+        _restyle_measurement_points alongside the radius arc so both update on every trigger
+        that already recolours the points (selection, drag, Record/Clear, ...).
+        """
+        if ORIGIN_DECAY_ARROW_LAYER_NAME in self.viewer.layers:
+            return self.viewer.layers[ORIGIN_DECAY_ARROW_LAYER_NAME]
+        layer = self.viewer.add_shapes(
+            name=ORIGIN_DECAY_ARROW_LAYER_NAME,
+            ndim=4,
+            edge_color=ARROW_COLOR,
+            face_color=ARROW_COLOR,
+            edge_width=3,
+        )
+        layer.editable = False
+        self.viewer.layers.selection.active = self.layer_measurements
+        return layer
+
+    def _refresh_origin_decay_arrow(self) -> None:
+        if ORIGIN_DECAY_ARROW_LAYER_NAME not in self.viewer.layers:
+            return
+        layer = self.viewer.layers[ORIGIN_DECAY_ARROW_LAYER_NAME]
+
+        shaft_shape = None
+        head_shape = None
+        selected_row = self._get_selected_measurement_row()
+        if selected_row is not None:
+            current_view = self.viewer.dims.current_step[0]
+            current_event = self.viewer.dims.current_step[1]
+            if self.data[selected_row].event_number == current_event:
+                view_data = self.data[selected_row].views[current_view]
+                if view_data.origin is not None and view_data.decay is not None:
+                    shaft_2d, head_2d = origin_decay_arrow(view_data.origin, view_data.decay)
+                    if shaft_2d is not None:
+                        shaft_shape = np.array(
+                            [[current_view, current_event, *point] for point in shaft_2d]
+                        )
+                        head_shape = np.array(
+                            [[current_view, current_event, *point] for point in head_2d]
+                        )
+
+        # Same napari Shapes-layer quirks as the radius arc - see _refresh_radius_arc's comment:
+        # always clear via select-all + remove_selected (never `.data = [...]`), always add via
+        # .add(..., shape_type=...) (never rely on `.data =` for the shape type either).
+        if len(layer.data) > 0:
+            layer.selected_data = set(range(len(layer.data)))
+            layer.remove_selected()
+
+        if shaft_shape is not None:
+            layer.add(shaft_shape, shape_type="line")
+            layer.add(head_shape, shape_type="polygon")
 
     def _sync_other_processes_layer(self) -> None:
         """Populate the read-only 'other processes' layer for the current
