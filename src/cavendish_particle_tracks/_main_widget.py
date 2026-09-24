@@ -63,7 +63,7 @@ ORIGIN_DECAY_ARROW_LAYER_NAME = "Origin-Decay Arrow"
 LENGTH_COLOR = "cornflowerblue"
 RADIUS_COLOR = "mediumorchid"
 BOTH_COLOR = "slateblue"
-ARROW_COLOR = "limegreen"
+ARROW_COLOR = "cyan"
 
 _singleton_instance = None
 
@@ -120,17 +120,36 @@ def _role_symbol(is_origin: bool, is_decay: bool) -> str:
     """The point SHAPE used to tell an origin vertex from a decay vertex apart at a glance -
     unlike colour or text, unaffected by colourblindness, and (like the point's own size) capped
     rather than growing without bound at high zoom, so it never obscures the underlying image.
+
+    Both origin and decay use "ring" (a donut) - a filled triangle was tried for decay first, but
+    found live to visually clash with the O-D arrow's own triangular tip: the two triangles point
+    in whatever directions their own geometry dictates, which often isn't the arrow's direction,
+    reading as confusing rather than informative right where the arrowhead already sits. See
+    _role_face_color for how origin and decay are told apart now that they share a shape.
     "diamond" is the rare degenerate case of a single point being both at once (a decay length of
-    exactly zero) - everything else (a bare point, or one that's only part of a radius fit) stays
-    the plain default "disc", unchanged.
+    exactly zero, so no arrow is ever drawn for it - see origin_decay_arrow - meaning there's no
+    arrow tip for a distinct shape to clash with here). Anything else (a bare point, or one that's
+    only part of a radius fit) stays the plain default "disc", unchanged.
     """
     if is_origin and is_decay:
         return "diamond"
-    if is_origin:
+    if is_origin or is_decay:
         return "ring"
-    if is_decay:
-        return "triangle_up"
     return "disc"
+
+
+def _role_face_color(is_origin: bool, is_decay: bool) -> str:
+    """The point FILL colour additionally distinguishing origin from decay, now that both use the
+    same "ring" shape (see _role_symbol) - yellow for origin, blue for decay (chosen once the
+    arrow itself became cyan, so all three read as distinct against the grey film background and
+    against each other). The rare "both at once" case reuses origin's yellow, arbitrarily but
+    consistently; anything else keeps the plain default white fill.
+    """
+    if is_origin:
+        return "yellow"
+    if is_decay:
+        return "blue"
+    return "white"
 
 
 def get_singleton(viewer=None, docking_area: str = "bottom", data_folder=None):
@@ -825,13 +844,14 @@ class ParticleTracksWidget(QWidget):
         border_colors = []
         sizes = []
         symbols = []
+        face_colors = []
         for point in data:
             is_length = matches(point, length_points)
             is_radius = matches(point, radius_points)
-            symbols.append(_role_symbol(
-                is_origin=origin_point is not None and matches(point, [origin_point]),
-                is_decay=decay_point is not None and matches(point, [decay_point]),
-            ))
+            is_origin = origin_point is not None and matches(point, [origin_point])
+            is_decay = decay_point is not None and matches(point, [decay_point])
+            symbols.append(_role_symbol(is_origin=is_origin, is_decay=is_decay))
+            face_colors.append(_role_face_color(is_origin=is_origin, is_decay=is_decay))
             if is_length and is_radius:
                 border_colors.append(BOTH_COLOR)
             elif is_length:
@@ -864,9 +884,11 @@ class ParticleTracksWidget(QWidget):
             self.layer_measurements.border_width = [DEFAULT_BORDER_WIDTH] * len(data)
             self.layer_measurements.size = sizes
             self.layer_measurements.symbol = symbols
+            self.layer_measurements.face_color = face_colors
             self.layer_measurements.current_border_color = DEFAULT_BORDER_COLOR
             self.layer_measurements.current_border_width = DEFAULT_BORDER_WIDTH
             self.layer_measurements.current_symbol = "disc"
+            self.layer_measurements.current_face_color = "white"
             # Force the repaint explicitly, rather than relying on one of the assignments above
             # to trigger it as a side effect - with border_width now staying at a single uniform
             # value, napari may treat that particular assignment as a no-op and skip its own
@@ -1715,6 +1737,7 @@ class ParticleTracksWidget(QWidget):
         border_colors = []
         sizes = []
         symbols = []
+        face_colors = []
         for i, particle in enumerate(self.data):
             if i == selected_row:
                 continue
@@ -1746,12 +1769,16 @@ class ParticleTracksWidget(QWidget):
                 points.append([current_view, current_event, xy[0], xy[1]])
                 border_colors.append(color)
                 sizes.append(NORMAL_SIZE if visible else HIDDEN_SIZE)
-                # Same shape distinction as _restyle_measurement_points - see _role_symbol.
-                symbols.append(_role_symbol(is_origin=xy == origin_xy, is_decay=xy == decay_xy))
+                # Same shape/fill distinction as _restyle_measurement_points - see _role_symbol
+                # and _role_face_color.
+                is_origin = xy == origin_xy
+                is_decay = xy == decay_xy
+                symbols.append(_role_symbol(is_origin=is_origin, is_decay=is_decay))
+                face_colors.append(_role_face_color(is_origin=is_origin, is_decay=is_decay))
 
         layer.data = points
         if points:
-            layer.face_color = ["white"] * len(points)
+            layer.face_color = face_colors
             layer.border_color = border_colors
             layer.border_width = [7] * len(points)
             layer.size = sizes
