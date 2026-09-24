@@ -44,6 +44,7 @@ from ._settings import get_bypass, get_shuffling_seed
 from ._calibration_manager import CalibrationManager, GENERIC_CALIBRATION_LAYER_NAME, PER_IMAGE_CALIBRATION_LAYER_NAME
 from .intercept_close import InterceptClose
 from .analysis import EXPECTED_PROCESSES_NICE, VIEW_NAMES, ParticleDecay, CalibrationRow, FiducialViewData, SavedSession, CSV_COLUMNS, round_px, round_angle, load_csv_session
+from ._calculate import radius_arc_points
 
 ENABLE_MAG = False
 # Session files are CSV-only for now - flip this back to True to restore .pkl support.
@@ -54,6 +55,13 @@ MEASUREMENTS_LAYER_NAME = "Radii and Lengths"
 OTHER_PROCESSES_LAYER_NAME = "Other Processes (view only)"
 ANGLES_LAYER_NAME = "Decay Angles Tool"
 IMAGE_LAYER_NAME = "Bubble Chamber Data"
+RADIUS_ARC_LAYER_NAME = "Radius Arc"
+
+# Shared between _restyle_measurement_points, _sync_other_processes_layer and the radius-arc
+# layer, so a point's ring colour and the arc drawn through a radius fit always agree.
+LENGTH_COLOR = "cornflowerblue"
+RADIUS_COLOR = "mediumorchid"
+BOTH_COLOR = "slateblue"
 
 _singleton_instance = None
 
@@ -738,9 +746,6 @@ class ParticleTracksWidget(QWidget):
 
         DEFAULT_BORDER_COLOR = "dimgrey"
         DEFAULT_BORDER_WIDTH = 7
-        LENGTH_COLOR = "cornflowerblue"
-        RADIUS_COLOR = "mediumorchid"
-        BOTH_COLOR = "slateblue"
 
         length_points = []
         radius_points = []
@@ -818,6 +823,8 @@ class ParticleTracksWidget(QWidget):
             self.layer_measurements.refresh()
         finally:
             self._restyling = False
+
+        self._refresh_radius_arc()
 
     def _sync_measurement_layer_to_selected_process(self, event=None) -> None:
         """Make the on-canvas origin/decay/track points reflect whichever process is selected in
@@ -1386,6 +1393,7 @@ class ParticleTracksWidget(QWidget):
         # Create measurements layer if not already there
         self.layer_measurements = self._setup_measurement_layer()
         self._setup_other_processes_layer()
+        self._setup_radius_arc_layer()
 
         # Move bubble chamber layer to the bottom
         self.viewer.layers.move(self.viewer.layers.index(bubble_chamber_layer), 0)
@@ -1441,6 +1449,61 @@ class ParticleTracksWidget(QWidget):
         self.viewer.layers.selection.active = self.layer_measurements
         return layer
 
+    def _setup_radius_arc_layer(self):
+        """A single-shape overlay tracing the currently selected process's radius fit as an arc
+        through its 3 points (see _calculate.radius_arc_points), in the same colour as their
+        highlight ring - the visual counterpart of that colour, showing the 3 points are linked
+        as one radius measurement rather than 3 coincidentally same-coloured ones. Refreshed by
+        _refresh_radius_arc, called from _restyle_measurement_points so it updates live on every
+        trigger that already recolours the points (selection, drag, Record/Clear, ...).
+        """
+        if RADIUS_ARC_LAYER_NAME in self.viewer.layers:
+            return self.viewer.layers[RADIUS_ARC_LAYER_NAME]
+        layer = self.viewer.add_shapes(
+            name=RADIUS_ARC_LAYER_NAME,
+            ndim=4,
+            shape_type="path",
+            edge_color=RADIUS_COLOR,
+            edge_width=4,
+            face_color="transparent",
+        )
+        layer.editable = False
+        self.viewer.layers.selection.active = self.layer_measurements
+        return layer
+
+    def _refresh_radius_arc(self) -> None:
+        if RADIUS_ARC_LAYER_NAME not in self.viewer.layers:
+            return
+        layer = self.viewer.layers[RADIUS_ARC_LAYER_NAME]
+
+        arc_shape = None
+        selected_row = self._get_selected_measurement_row()
+        if selected_row is not None:
+            current_view = self.viewer.dims.current_step[0]
+            current_event = self.viewer.dims.current_step[1]
+            if self.data[selected_row].event_number == current_event:
+                view_data = self.data[selected_row].views[current_view]
+                if len(view_data.track_points) == 3:
+                    arc_2d = radius_arc_points(*view_data.track_points)
+                    arc_shape = np.array(
+                        [[current_view, current_event, *point] for point in arc_2d]
+                    )
+
+        if arc_shape is None:
+            # Assigning `.data = []` directly onto a Shapes layer that currently holds a shape
+            # crashes in this napari version (a slicing internals bug, not specific to this
+            # layer) - selecting everything and removing it is the reliable way to clear one.
+            if len(layer.data) > 0:
+                layer.selected_data = set(range(len(layer.data)))
+                layer.remove_selected()
+            return
+
+        # Restyling shape_type/edge_color/edge_width explicitly here (as _restyle_measurement_points
+        # does for the points layer) trips an internal napari bug when reassigning .data on a
+        # Shapes layer that already holds a shape - so this relies on the layer's own current_*
+        # style, set once at creation in _setup_radius_arc_layer, applying to newly-added shapes.
+        layer.data = [arc_shape]
+
     def _sync_other_processes_layer(self) -> None:
         """Populate the read-only 'other processes' layer for the current
         view/event, excluding whichever process is selected (its points
@@ -1470,10 +1533,6 @@ class ParticleTracksWidget(QWidget):
 
         NORMAL_SIZE = 20
         HIDDEN_SIZE = 0
-        LENGTH_COLOR = "cornflowerblue"
-        RADIUS_COLOR = "mediumorchid"
-
-        BOTH_COLOR = "slateblue"
 
         points = []
         border_colors = []
