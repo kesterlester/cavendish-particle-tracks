@@ -916,15 +916,10 @@ class ParticleTracksWidget(QWidget):
         self._measurement_role_index_map = {
             len(other_slices) + i: roles for i, roles in enumerate(role_groups.values())
         }
-        # How many points THIS SLICE (current view/event only, not other_slices' carried-over
-        # points from other views/events) held right after this rebuild -
-        # _propagate_measurement_point_drag compares the live current-slice count against this
-        # to tell "someone moved" from "someone got deleted" without needing to trust any
-        # particular event's semantics (see its docstring). Must stay slice-scoped to match what
-        # that comparison measures - counting other_slices here too previously made switching to
-        # a second view and back permanently disable drag propagation for the first one, since
-        # the "expected" total only ever grew from then on.
-        self._measurement_role_index_map_point_count = len(new_points) + len(orphan_points)
+        # Marks the map as trustworthy again, having just been rebuilt from the current .data -
+        # see _invalidate_measurement_role_index_map for why this can't be inferred from a point
+        # count instead.
+        self._measurement_role_index_map_valid = True
 
         if view_data is not None:
             self.table.setItem(
@@ -1427,10 +1422,14 @@ class ParticleTracksWidget(QWidget):
                 border_width=7,
                 border_width_is_relative=False,
             )
-            # Order matters: drag propagation must run first on both signals so every role
-            # sharing a dragged point is already updated before the deletion-reconciliation below
-            # inspects them - see _propagate_measurement_point_drag's docstring for why it's
-            # connected to highlight too, not just data.
+            # Order matters: invalidation must run before propagation, on every event, so that an
+            # add/remove disables propagation from this same event onwards - see
+            # _invalidate_measurement_role_index_map's docstring. Propagation itself must run
+            # ahead of the deletion-reconciliation below so every role sharing a dragged point is
+            # already updated before that method inspects them - see
+            # _propagate_measurement_point_drag's docstring for why it's connected to highlight
+            # too, not just data.
+            layer.events.data.connect(self._invalidate_measurement_role_index_map)
             layer.events.data.connect(self._propagate_measurement_point_drag)
             layer.events.data.connect(self._on_measurement_points_changed)
             layer.events.highlight.connect(self._propagate_measurement_point_drag)
@@ -1584,6 +1583,25 @@ class ParticleTracksWidget(QWidget):
             layer.border_width = [7] * len(points)
             layer.size = sizes
 
+    def _invalidate_measurement_role_index_map(self, event=None) -> None:
+        """A structural change to the measurement layer - a point added or removed, as opposed
+        to "changing"/"changed" which only move an EXISTING point's value at a fixed index - can
+        shift every later index up or down, making _measurement_role_index_map's cached
+        index->role mapping point at entirely the wrong point. Connected ahead of
+        _propagate_measurement_point_drag on layer.events.data, so that method sees the
+        just-invalidated map on this very same event too, not just from the next one onwards.
+
+        _measurement_role_index_map_valid only becomes True again once
+        _sync_measurement_layer_to_selected_process has actually rebuilt the map from the
+        current .data - not on any timer or count check. A point count can coincidentally
+        recover after a delete-then-add (found live: it silently let a stale map merge two
+        different roles into one identical coordinate, corrupting a radius fit into a
+        degenerate triangle and crashing numpy with a singular-matrix error) - only knowing
+        specifically that a rebuild happened is actually sound.
+        """
+        if event is not None and getattr(event, "action", None) in ("adding", "added", "removing", "removed"):
+            self._measurement_role_index_map_valid = False
+
     def _propagate_measurement_point_drag(self, event=None) -> None:
         """Keep every role in _measurement_role_index_map synced to its point's live canvas
         position - both so a canvas point representing more than one role (e.g. a decay vertex
@@ -1601,12 +1619,20 @@ class ParticleTracksWidget(QWidget):
         documented behaviour) not to fire a "changing" data event on every mouse-move frame -
         only highlight does, and it carries no per-point delta at all. So instead of reading
         event.data_indices, this just re-reads every KNOWN role's live position by index on every
-        opportunity it gets. That's only safe if no point has actually been deleted since
-        _measurement_role_index_map was last built - a deletion can shift every later index down,
-        so trusting stale indices then could silently relabel the wrong point. Guarded against via
-        _measurement_role_index_map_point_count: if the live count has dropped, this backs off
-        entirely and leaves it to _on_measurement_points_changed's coordinate-based deletion
-        handling instead, which doesn't depend on index stability.
+        opportunity it gets. That's only safe if no point has actually been added or removed since
+        _measurement_role_index_map was last built - either can shift every later index up or
+        down, so trusting stale indices then could silently relabel the wrong point.
+
+        Guarded via _measurement_role_index_map_valid, set False by
+        _invalidate_measurement_role_index_map on any structural change and only set True again
+        once _sync_measurement_layer_to_selected_process has actually rebuilt the map. An earlier
+        version of this guard compared point COUNTS instead ("has it dropped since the map was
+        built") - found live to be unsound: a delete followed by an unrelated add elsewhere can
+        restore the old count while every index underneath has shifted, and count-based
+        comparison can't tell the difference. That let a stale map corrupt a radius fit into two
+        identical track points (crashing numpy with a singular-matrix error) well after the
+        actual deletion had happened, not right after it. Validity has to be tracked directly,
+        not inferred from a number that can coincidentally recover.
 
         Also guarded against a real cross-view data corruption bug found live: switching the
         View/Event slider fires layer.events.highlight (napari's own internal re-slicing) before
@@ -1636,6 +1662,11 @@ class ParticleTracksWidget(QWidget):
             # identical reason).
             return
 
+        if not getattr(self, "_measurement_role_index_map_valid", False):
+            _debug_trace("propagate: SKIP - role_index_map invalidated by a structural change "
+                         "since it was last rebuilt")
+            return
+
         role_index_map = getattr(self, "_measurement_role_index_map", {})
         if not role_index_map:
             return
@@ -1648,13 +1679,6 @@ class ParticleTracksWidget(QWidget):
             return  # viewer has wandered to a different event mid-navigation - not meaningful yet
 
         data = self.layer_measurements.data
-        current_slice_count = sum(1 for p in data if p[0] == current_view and p[1] == current_event)
-        expected_count = getattr(self, "_measurement_role_index_map_point_count", None)
-        if expected_count is not None and current_slice_count < expected_count:
-            _debug_trace(f"propagate: SKIP - slice point count dropped from {expected_count} to "
-                         f"{current_slice_count}, a real deletion may have shifted indices")
-            return
-
         view_data = self.data[selected_row].views[current_view]
 
         _debug_trace(f"propagate: event_action={getattr(event, 'action', None)!r} "

@@ -472,9 +472,14 @@ class ViewData:
     def _recompute_radius(self) -> None:
         from ._calculate import radius
 
-        if len(self.track_points) == 3:
+        if len(self.track_points) != 3:
+            self.radius_px = None
+            return
+        try:
             self.radius_px = radius(*self.track_points)
-        else:
+        except np.linalg.LinAlgError:
+            # 3 exactly (or numerically near-enough) collinear/coincident points have no
+            # well-defined circle - a straight track has no meaningful radius, not a crash.
             self.radius_px = None
 
     def set_decay_angle_lines(self, lines: list[list[list[float]]] | None) -> None:

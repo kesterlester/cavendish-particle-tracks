@@ -88,6 +88,21 @@ def test_set_track_points_bulk_assignment():
     assert view.radius_px == pytest.approx(5.0, rel=1e-3)
 
 
+def test_exactly_collinear_track_points_give_no_radius_instead_of_crashing():
+    """Regression test: a genuinely degenerate 3-point selection (exactly collinear, or 2
+    coincident points) has no well-defined circle - np.linalg.solve raises LinAlgError
+    ("Singular matrix") for this, and that used to be uncaught, crashing the whole app. A
+    straight track segment simply has no meaningful radius, same as an incomplete selection.
+    """
+    view = ViewData()
+    view.set_track_points([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]])  # exactly collinear
+    assert view.radius_px is None
+
+    view2 = ViewData()
+    view2.set_track_points([[3.0, 4.0], [3.0, 4.0], [9.0, 10.0]])  # 2 coincident points
+    assert view2.radius_px is None
+
+
 def test_length_and_radius_are_independent_of_each_other():
     # setting up a radius fit shouldn't touch length, and vice versa
     view = ViewData()
