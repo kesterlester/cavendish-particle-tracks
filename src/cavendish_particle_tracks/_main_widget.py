@@ -1607,12 +1607,33 @@ class ParticleTracksWidget(QWidget):
         _measurement_role_index_map_point_count: if the live count has dropped, this backs off
         entirely and leaves it to _on_measurement_points_changed's coordinate-based deletion
         handling instead, which doesn't depend on index stability.
+
+        Also guarded against a real cross-view data corruption bug found live: switching the
+        View/Event slider fires layer.events.highlight (napari's own internal re-slicing) before
+        _sync_measurement_layer_to_selected_process - connected to the same dims.events.current_step
+        signal - has run to rebuild _measurement_role_index_map for the new slice. Without the
+        _last_synced_dims check below, this method would read current_view/view_data fresh (so
+        already pointing at the NEW view's ViewData) but role_index_map and self.layer_measurements.data
+        still describing the OLD view - copying one view's point straight into another view's
+        data. _on_measurement_points_changed already carried this exact guard; this method never
+        had it.
         """
         if event is None:
             return
         if getattr(event, "action", None) not in (None, "changing", "changed"):
             return  # explicitly not for add/remove-related actions - see docstring
         if getattr(self, "_restyling", False) or getattr(self, "_syncing", False):
+            return
+
+        current_view = self.viewer.dims.current_step[0]
+        current_event = self.viewer.dims.current_step[1]
+        current_dims_now = (current_view, current_event)
+        if current_dims_now != getattr(self, "_last_synced_dims", None):
+            # The View/Event slider has already moved on, but our own dims-triggered rebuild for
+            # the new slice hasn't run yet - role_index_map and self.layer_measurements.data still
+            # describe the OLD slice. Bail out - the sync callback about to run will fix this
+            # properly (matching _on_measurement_points_changed's identical guard, for the
+            # identical reason).
             return
 
         role_index_map = getattr(self, "_measurement_role_index_map", {})
@@ -1623,8 +1644,6 @@ class ParticleTracksWidget(QWidget):
         if selected_row is None:
             return
 
-        current_view = self.viewer.dims.current_step[0]
-        current_event = self.viewer.dims.current_step[1]
         if self.data[selected_row].event_number not in (-1, current_event):
             return  # viewer has wandered to a different event mid-navigation - not meaningful yet
 
