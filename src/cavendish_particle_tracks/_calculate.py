@@ -10,7 +10,8 @@ from .analysis import (
 Point = tuple[float, float]
 
 
-def radius(a: Point, b: Point, c: Point) -> float:
+def circle_fit(a: Point, b: Point, c: Point) -> tuple[float, float, float]:
+    """The center (xc, yc) and radius of the one circle passing through all 3 points."""
     lhs = np.array(
         [
             [2 * a[0], 2 * a[1], 1],
@@ -26,13 +27,66 @@ def radius(a: Point, b: Point, c: Point) -> float:
         ]
     )
     xc, yc, k = np.linalg.solve(lhs, rhs)
-    return np.sqrt(xc * xc + yc * yc + k)
+    r = np.sqrt(xc * xc + yc * yc + k)
+    return xc, yc, r
+
+
+def radius(a: Point, b: Point, c: Point) -> float:
+    _, _, r = circle_fit(a, b, c)
+    return r
 
 
 def length(a: Point, b: Point) -> float:
     pa = np.array(a)
     pb = np.array(b)
     return np.linalg.norm(pa - pb)
+
+
+# Above this ratio of fitted radius to the points' own spread, the 3 points are close enough to
+# collinear that the circle's center is so far away (or the fit so ill-conditioned) that drawing
+# the true arc would be visually meaningless or numerically unstable - a straight line through the
+# two most distant points is what that arc would look like anyway at this point.
+_RADIUS_ARC_STRAIGHT_LINE_THRESHOLD = 50
+
+
+def radius_arc_points(a: Point, b: Point, c: Point, num_segments: int = 40) -> list[Point]:
+    """The shortest arc of the 3-point circle that visits a, b and c in order along the curve
+    (not necessarily input order) - i.e. from whichever of the 3 points is at one extreme angle
+    round to the one at the other extreme, passing through the middle one, not the long way round.
+    Falls back to a straight line through the two most distant of the 3 points when they're too
+    close to collinear for a stable circle fit (see _RADIUS_ARC_STRAIGHT_LINE_THRESHOLD).
+
+    Assumes the 3 points span less than half the circle, which real track measurements always
+    will (they're 3 points along one continuous, gently-curving segment of a track, never a
+    substantial fraction of a full loop) - the "shortest arc between the extreme angles" logic
+    below doesn't handle a wider span correctly.
+    """
+    points = [a, b, c]
+    pairs = [(a, b), (a, c), (b, c)]
+    distances = [length(p, q) for p, q in pairs]
+    max_pairwise_distance = max(distances)
+
+    def straight_line_fallback() -> list[Point]:
+        p, q = pairs[int(np.argmax(distances))]
+        return [list(p), list(q)]
+
+    if max_pairwise_distance == 0:
+        return straight_line_fallback()  # degenerate: all 3 points coincide
+
+    try:
+        xc, yc, r = circle_fit(a, b, c)
+    except np.linalg.LinAlgError:
+        return straight_line_fallback()  # exactly collinear - the fit is singular
+
+    if not np.isfinite(r) or r > _RADIUS_ARC_STRAIGHT_LINE_THRESHOLD * max_pairwise_distance:
+        return straight_line_fallback()
+
+    angles = sorted(np.arctan2(p[1] - yc, p[0] - xc) for p in points)
+    start_angle, end_angle = angles[0], angles[-1]
+    return [
+        [xc + r * np.cos(t), yc + r * np.sin(t)]
+        for t in np.linspace(start_angle, end_angle, num_segments)
+    ]
 
 # def magnification(front_fiducial_1: Fiducial, front_fiducial_2: Fiducial,
 #                   back_fiducial_1: Fiducial, back_fiducial_2: Fiducial):
