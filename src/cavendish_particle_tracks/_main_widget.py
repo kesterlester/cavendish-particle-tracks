@@ -1508,6 +1508,18 @@ class ParticleTracksWidget(QWidget):
         as one radius measurement rather than 3 coincidentally same-coloured ones. Refreshed by
         _refresh_radius_arc, called from _restyle_measurement_points so it updates live on every
         trigger that already recolours the points (selection, drag, Record/Clear, ...).
+
+        DESIGN NOTE for whoever draws the next process-scoped decorator (an O-D arrow, an O/D
+        shape distinction, ...): this layer currently only ever shows the SELECTED process's own
+        arc - "Show all processes" (see _sync_other_processes_layer) dims OTHER processes' points
+        but does not draw arcs for them at all, a known, deliberately out-of-scope gap as of this
+        writing. When that gets fixed, do it once, generically, for every decorator kind - e.g.
+        rebuild _refresh_radius_arc (and any future decorator refresh) to iterate over "whichever
+        processes are currently supposed to be visible" (just the selected one, or all of them
+        when that checkbox is on, each at its own opacity) rather than hard-coding "the selected
+        process" - so a brand new decorator added later automatically respects the checkbox for
+        free, instead of every decorator needing its own bespoke all-processes handling bolted on
+        after the fact.
         """
         if RADIUS_ARC_LAYER_NAME in self.viewer.layers:
             return self.viewer.layers[RADIUS_ARC_LAYER_NAME]
@@ -1563,6 +1575,10 @@ class ParticleTracksWidget(QWidget):
         here). Uses the same white-dot/coloured-ring look as the
         interactive layer; the layer's own opacity is the only thing that
         distinguishes 'theirs' from 'mine'.
+
+        Points only, no decorators - see _setup_radius_arc_layer's design note for why (the arc,
+        and any future decorator, only ever renders for the SELECTED process right now, checkbox
+        or not) and how that should eventually generalise.
         """
         if OTHER_PROCESSES_LAYER_NAME not in self.viewer.layers:
             return
