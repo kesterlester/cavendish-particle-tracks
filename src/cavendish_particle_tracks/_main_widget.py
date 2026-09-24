@@ -7,9 +7,12 @@ for further analysis.
 """
 
 import glob
+import logging
 import os
 import pickle
+import tempfile
 import warnings
+from logging.handlers import RotatingFileHandler
 
 import dask.array
 import napari
@@ -54,6 +57,36 @@ IMAGE_LAYER_NAME = "Bubble Chamber Data"
 
 _singleton_instance = None
 
+# Opt-in interaction trace for diagnosing bugs that only show up in a live, real-mouse GUI
+# session (event ordering / timing that a headless test can't reproduce) - see _debug_trace().
+# Off by default (zero cost: _debug_trace() is a no-op until this is turned on). Enable by
+# setting the environment variable below before launching, e.g.:
+#     CPT_DEBUG_TRACE=1 ./launch_debug.py
+# Writes to DEBUG_LOG_PATH, printed once to the terminal on startup when enabled. Bounded to a
+# couple of MB total (a rotating file, not an ever-growing one) so it's safe to just leave on.
+DEBUG_TRACE_ENV_VAR = "CPT_DEBUG_TRACE"
+DEBUG_LOG_PATH = os.path.join(tempfile.gettempdir(), "cavendish_particle_tracks_debug_trace.log")
+
+_debug_trace_logger = logging.getLogger("cavendish_particle_tracks.debug_trace")
+_debug_trace_logger.propagate = False
+
+
+def _maybe_enable_debug_trace() -> None:
+    """Called once, from get_singleton() below. Idempotent, so it's harmless if the widget is
+    ever constructed more than once in the same process."""
+    if not os.environ.get(DEBUG_TRACE_ENV_VAR) or _debug_trace_logger.handlers:
+        return
+    handler = RotatingFileHandler(DEBUG_LOG_PATH, maxBytes=1_000_000, backupCount=2)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    _debug_trace_logger.addHandler(handler)
+    _debug_trace_logger.setLevel(logging.DEBUG)
+    print(f"[cavendish-particle-tracks] {DEBUG_TRACE_ENV_VAR} is set - debug trace -> {DEBUG_LOG_PATH}")
+
+
+def _debug_trace(msg: str) -> None:
+    if _debug_trace_logger.handlers:
+        _debug_trace_logger.debug(msg)
+
 
 def _as_xy(point) -> tuple[float, float]:
     """Round a 2D point to a hashable, comparison-stable (x, y) tuple - used wherever canvas
@@ -76,6 +109,7 @@ def _measurement_roles(view_data) -> list[tuple[str, list[float]]]:
 def get_singleton(viewer=None, docking_area: str = "bottom", data_folder=None):
     """Return the singleton ParticleTracksWidget, creating it if necessary."""
     global _singleton_instance
+    _maybe_enable_debug_trace()
     if _singleton_instance is None:
         _singleton_instance = ParticleTracksWidget(
             viewer, docking_area=docking_area, data_folder=data_folder
@@ -1509,14 +1543,23 @@ class ParticleTracksWidget(QWidget):
             return
 
         current_view = self.viewer.dims.current_step[0]
+        current_event = self.viewer.dims.current_step[1]
         view_data = self.data[selected_row].views[current_view]
         data = self.layer_measurements.data
+
+        _debug_trace(f"propagate: action={event.action} data_indices={list(event.data_indices)} "
+              f"selected_row={selected_row} current_view={current_view} current_event={current_event} "
+              f"last_synced_dims={getattr(self, '_last_synced_dims', None)} "
+              f"role_index_map={role_index_map} "
+              f"BEFORE track_points={view_data.track_points} decay={view_data.decay} origin={view_data.origin}")
 
         for idx in event.data_indices:
             roles = role_index_map.get(idx)
             if not roles:
+                _debug_trace(f"propagate: idx={idx} NO ROLES - data at idx = {list(data[idx]) if idx < len(data) else 'OUT OF RANGE'}")
                 continue
             new_xy = [float(data[idx][2]), float(data[idx][3])]
+            _debug_trace(f"propagate: idx={idx} roles={roles} new_xy={new_xy}")
             for role in roles:
                 if role == "origin":
                     view_data.set_origin(new_xy)
@@ -1528,6 +1571,12 @@ class ParticleTracksWidget(QWidget):
                         updated_track_points = list(view_data.track_points)
                         updated_track_points[track_index] = new_xy
                         view_data.set_track_points(updated_track_points)
+                    else:
+                        _debug_trace(f"propagate: track_index={track_index} OUT OF RANGE for "
+                              f"track_points of length {len(view_data.track_points)}")
+
+        _debug_trace(f"propagate: AFTER track_points={view_data.track_points} "
+              f"decay={view_data.decay} origin={view_data.origin} radius_px={view_data.radius_px}")
 
     def _selected_measurement_target(self):
         """The (row, ViewData) a measurement action should act on, or (None, None) if there's
@@ -1743,13 +1792,19 @@ class ParticleTracksWidget(QWidget):
             for p in self.layer_measurements.data
             if p[0] == current_view and p[1] == current_event
         }
+        _debug_trace(f"reconcile: event_action={getattr(event, 'action', None)!r} "
+              f"current_xy_on_canvas={current_xy_on_canvas} "
+              f"origin={view_data.origin} decay={view_data.decay} track_points={view_data.track_points}")
 
         if view_data.origin is not None and _as_xy(view_data.origin) not in current_xy_on_canvas:
+            _debug_trace(f"reconcile: CLEARING origin {view_data.origin}")
             view_data.set_origin(None)
         if view_data.decay is not None and _as_xy(view_data.decay) not in current_xy_on_canvas:
+            _debug_trace(f"reconcile: CLEARING decay {view_data.decay}")
             view_data.set_decay(None)
         remaining_track_points = [p for p in view_data.track_points if _as_xy(p) in current_xy_on_canvas]
         if len(remaining_track_points) != len(view_data.track_points):
+            _debug_trace(f"reconcile: CLEARING track_points {view_data.track_points} -> {remaining_track_points}")
             view_data.set_track_points(remaining_track_points)
 
         self.table.setItem(
