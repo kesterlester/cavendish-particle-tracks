@@ -904,6 +904,10 @@ class ParticleTracksWidget(QWidget):
         self._measurement_role_index_map = {
             len(other_slices) + i: roles for i, roles in enumerate(role_groups.values())
         }
+        # How many points this slice held right after this rebuild - _propagate_measurement_point_drag
+        # compares the live count against this to tell "someone moved" from "someone got deleted"
+        # without needing to trust any particular event's semantics (see its docstring).
+        self._measurement_role_index_map_point_count = len(other_slices) + len(new_points) + len(orphan_points)
 
         if view_data is not None:
             self.table.setItem(
@@ -1405,11 +1409,13 @@ class ParticleTracksWidget(QWidget):
                 border_width=7,
                 border_width_is_relative=False,
             )
-            # Order matters: drag propagation must run first so every role sharing a dragged
-            # point is already updated before the deletion-reconciliation below inspects them -
-            # see _propagate_measurement_point_drag's docstring.
+            # Order matters: drag propagation must run first on both signals so every role
+            # sharing a dragged point is already updated before the deletion-reconciliation below
+            # inspects them - see _propagate_measurement_point_drag's docstring for why it's
+            # connected to highlight too, not just data.
             layer.events.data.connect(self._propagate_measurement_point_drag)
             layer.events.data.connect(self._on_measurement_points_changed)
+            layer.events.highlight.connect(self._propagate_measurement_point_drag)
             layer.events.highlight.connect(self._on_measurement_points_changed)
             layer.mouse_drag_callbacks.append(self._on_measurement_layer_right_click)
             return layer
@@ -1509,28 +1515,33 @@ class ParticleTracksWidget(QWidget):
             layer.size = sizes
 
     def _propagate_measurement_point_drag(self, event=None) -> None:
-        """When a canvas point that represents more than one role (e.g. a decay vertex reused
-        as one of the three radius-fit points, per _sync_measurement_layer_to_selected_process's
-        dedup) is dragged, push its new position into every role it represents - otherwise only
-        the role napari happens to report would move, and the others would silently drift apart
-        from what's now a second, invisible point at the old location.
+        """Keep every role in _measurement_role_index_map synced to its point's live canvas
+        position - both so a canvas point representing more than one role (e.g. a decay vertex
+        reused as one of the three radius-fit points) moves all of them together, and so a
+        single-role point's drag is reflected at all.
 
-        Connected ahead of _on_measurement_points_changed on the same event, and must run first:
-        once every role sharing this point is updated here, its stored coordinate already matches
-        the canvas, so that method's own deletion-reconciliation (which compares stored vs
-        on-canvas positions) correctly sees nothing missing, rather than mistaking this drag for
-        a deletion of every role but one.
+        Connected ahead of _on_measurement_points_changed on both layer.events.data and
+        layer.events.highlight, and must run first: once every role is synced here, stored
+        coordinates already match the canvas, so that method's own deletion-reconciliation
+        (which compares stored vs on-canvas positions) correctly sees nothing missing, rather
+        than mistaking an in-progress drag for a deletion.
 
-        Reacts to "changing" (mid-drag, fired on every mouse-move frame) as well as "changed"
-        (drag-end) - not just the latter. _on_measurement_points_changed is also connected to
-        layer.events.highlight, which napari fires on every one of those same frames with no
-        action guard of its own; if this method waited for "changed" alone, reconcile would see
-        a stale stored position against the already-moved canvas on every single frame but the
-        last, and mistake the in-progress drag for a deletion - which is exactly what used to
-        happen: a shared point's radius role would vanish mid-drag, well before mouse-release.
+        Deliberately event-shape-agnostic rather than trying to track exactly which point moved
+        on which specific event: real napari drags turned out (found via a live trace, not
+        documented behaviour) not to fire a "changing" data event on every mouse-move frame -
+        only highlight does, and it carries no per-point delta at all. So instead of reading
+        event.data_indices, this just re-reads every KNOWN role's live position by index on every
+        opportunity it gets. That's only safe if no point has actually been deleted since
+        _measurement_role_index_map was last built - a deletion can shift every later index down,
+        so trusting stale indices then could silently relabel the wrong point. Guarded against via
+        _measurement_role_index_map_point_count: if the live count has dropped, this backs off
+        entirely and leaves it to _on_measurement_points_changed's coordinate-based deletion
+        handling instead, which doesn't depend on index stability.
         """
-        if event is None or event.action not in ("changing", "changed"):
+        if event is None:
             return
+        if getattr(event, "action", None) not in (None, "changing", "changed"):
+            return  # explicitly not for add/remove-related actions - see docstring
         if getattr(self, "_restyling", False) or getattr(self, "_syncing", False):
             return
 
@@ -1544,22 +1555,27 @@ class ParticleTracksWidget(QWidget):
 
         current_view = self.viewer.dims.current_step[0]
         current_event = self.viewer.dims.current_step[1]
-        view_data = self.data[selected_row].views[current_view]
+        if self.data[selected_row].event_number not in (-1, current_event):
+            return  # viewer has wandered to a different event mid-navigation - not meaningful yet
+
         data = self.layer_measurements.data
+        current_slice_count = sum(1 for p in data if p[0] == current_view and p[1] == current_event)
+        expected_count = getattr(self, "_measurement_role_index_map_point_count", None)
+        if expected_count is not None and current_slice_count < expected_count:
+            _debug_trace(f"propagate: SKIP - slice point count dropped from {expected_count} to "
+                         f"{current_slice_count}, a real deletion may have shifted indices")
+            return
 
-        _debug_trace(f"propagate: action={event.action} data_indices={list(event.data_indices)} "
-              f"selected_row={selected_row} current_view={current_view} current_event={current_event} "
-              f"last_synced_dims={getattr(self, '_last_synced_dims', None)} "
-              f"role_index_map={role_index_map} "
-              f"BEFORE track_points={view_data.track_points} decay={view_data.decay} origin={view_data.origin}")
+        view_data = self.data[selected_row].views[current_view]
 
-        for idx in event.data_indices:
-            roles = role_index_map.get(idx)
-            if not roles:
-                _debug_trace(f"propagate: idx={idx} NO ROLES - data at idx = {list(data[idx]) if idx < len(data) else 'OUT OF RANGE'}")
+        _debug_trace(f"propagate: event_action={getattr(event, 'action', None)!r} "
+                     f"role_index_map={role_index_map} "
+                     f"BEFORE track_points={view_data.track_points} decay={view_data.decay} origin={view_data.origin}")
+
+        for idx, roles in role_index_map.items():
+            if idx >= len(data):
                 continue
             new_xy = [float(data[idx][2]), float(data[idx][3])]
-            _debug_trace(f"propagate: idx={idx} roles={roles} new_xy={new_xy}")
             for role in roles:
                 if role == "origin":
                     view_data.set_origin(new_xy)
@@ -1571,12 +1587,9 @@ class ParticleTracksWidget(QWidget):
                         updated_track_points = list(view_data.track_points)
                         updated_track_points[track_index] = new_xy
                         view_data.set_track_points(updated_track_points)
-                    else:
-                        _debug_trace(f"propagate: track_index={track_index} OUT OF RANGE for "
-                              f"track_points of length {len(view_data.track_points)}")
 
         _debug_trace(f"propagate: AFTER track_points={view_data.track_points} "
-              f"decay={view_data.decay} origin={view_data.origin} radius_px={view_data.radius_px}")
+                     f"decay={view_data.decay} origin={view_data.origin} radius_px={view_data.radius_px}")
 
     def _selected_measurement_target(self):
         """The (row, ViewData) a measurement action should act on, or (None, None) if there's

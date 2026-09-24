@@ -133,3 +133,64 @@ def test_mid_drag_highlight_event_does_not_wipe_a_shared_role(cpt_widget):
     assert view_data.track_points[0] == [30.0, 40.0]
     assert len(view_data.track_points) == 3
     assert view_data.radius_px is not None
+
+
+def test_drag_reflected_via_highlight_events_alone_no_changing_event(cpt_widget):
+    """Regression test for a second, distinct bug found via a live trace: real napari drags do
+    NOT fire a "changing" data event on every mouse-move frame - only layer.events.highlight
+    reliably fires every frame, and it carries no per-point delta at all. A fix that only reacted
+    to "changing"/"changed" data events (the previous, insufficient fix) leaves view_data stale
+    for many consecutive highlight-only frames; reconcile then sees the canvas already at its new
+    position while the stored value is still at the old one, and drops the role. This is exactly
+    what happened live: dragging an UNSHARED radius point caused ANOTHER, completely untouched
+    radius point's role to be dropped several frames into the same drag.
+    """
+    cpt_widget.particle_decays_menu.setCurrentIndex(1)
+    cpt_widget.layer_measurements = cpt_widget._setup_measurement_layer()
+    cpt_widget.viewer.dims.set_current_step(0, 0)
+    cpt_widget.viewer.dims.set_current_step(1, 0)
+    current_view = cpt_widget.viewer.dims.current_step[0]
+
+    view_data = cpt_widget.data[0].views[current_view]
+    view_data.set_origin([1.0, 2.0])
+    view_data.set_decay([3.0, 4.0])
+    view_data.set_track_points([[3.0, 4.0], [7.0, 8.0], [9.0, 10.0]])  # track0 reuses decay
+    cpt_widget._sync_measurement_layer_to_selected_process()
+    assert len(cpt_widget.layer_measurements.data) == 4
+
+    r2_idx = _index_for_roles(cpt_widget._measurement_role_index_map, "track1")
+
+    def fire(event):
+        # Mirrors the real connection order on either signal: propagation runs first.
+        cpt_widget._propagate_measurement_point_drag(event)
+        cpt_widget._on_measurement_points_changed(event)
+
+    # Frame 0: the one "changing" data event napari actually fires for this drag.
+    cpt_widget.layer_measurements.data[r2_idx][2] = 7.1
+    cpt_widget.layer_measurements.data[r2_idx][3] = 8.1
+    fire(_FakeDataChangedEvent([r2_idx], action="changing"))
+
+    # Many intervening frames, highlight only - no further "changing" event at all, matching
+    # what the live trace actually showed for this exact scenario.
+    for step in range(1, 11):
+        cpt_widget.layer_measurements.data[r2_idx][2] = 7.1 + step
+        cpt_widget.layer_measurements.data[r2_idx][3] = 8.1 + step
+        fire(_FakeHighlightEvent())
+
+        # Must never be dropped, at any point mid-drag - not just at the end.
+        assert len(view_data.track_points) == 3, f"track_points shrank at step {step}"
+        assert view_data.radius_px is not None, f"radius vanished at step {step}"
+
+    # Frame end: the final "changed" data event.
+    cpt_widget.layer_measurements.data[r2_idx][2] = 20.0
+    cpt_widget.layer_measurements.data[r2_idx][3] = 25.0
+    fire(_FakeDataChangedEvent([r2_idx], action="changed"))
+
+    assert view_data.track_points[1] == [20.0, 25.0]
+    assert len(view_data.track_points) == 3
+    assert view_data.radius_px is not None
+    # The untouched roles must never have been disturbed.
+    assert view_data.origin == [1.0, 2.0]
+    assert view_data.decay == [3.0, 4.0]
+    assert view_data.track_points[0] == [3.0, 4.0]
+    assert view_data.track_points[2] == [9.0, 10.0]
