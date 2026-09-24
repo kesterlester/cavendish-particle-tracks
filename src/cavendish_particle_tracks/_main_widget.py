@@ -52,6 +52,25 @@ IMAGE_LAYER_NAME = "Bubble Chamber Data"
 
 _singleton_instance = None
 
+
+def _as_xy(point) -> tuple[float, float]:
+    """Round a 2D point to a hashable, comparison-stable (x, y) tuple - used wherever canvas
+    point positions need to be compared or grouped by "same place", since raw floats coming
+    back from napari can differ in the last bit or two from what was originally written.
+    """
+    return (round(float(point[0]), 6), round(float(point[1]), 6))
+
+
+def _measurement_roles(view_data) -> list[tuple[str, list[float]]]:
+    """Every named role a point on the measurement layer can currently fill for one view,
+    paired with its stored coordinate: the origin vertex, the decay vertex, and up to 3
+    numbered radius-fit track points. Roles with nothing stored yet are omitted.
+    """
+    roles = [("origin", view_data.origin), ("decay", view_data.decay)]
+    roles += [(f"track{i}", point) for i, point in enumerate(view_data.track_points)]
+    return [(role, point) for role, point in roles if point is not None]
+
+
 def get_singleton(viewer=None, docking_area: str = "bottom", data_folder=None):
     """Return the singleton ParticleTracksWidget, creating it if necessary."""
     global _singleton_instance
@@ -799,13 +818,20 @@ class ParticleTracksWidget(QWidget):
 
         new_points = []
         view_data = None
+        role_groups: dict[tuple[float, float], list[str]] = {}
         # Calibration rows have nothing to put on this layer - their fiducial stamps live on a
         # completely separate layer, managed by CalibrationManager instead of ParticleDecay.views.
         if selected_row is not None and not isinstance(self.data[selected_row], CalibrationRow):
             view_data = self.data[selected_row].views[current_view]
-            for point in (view_data.origin, view_data.decay, *view_data.track_points):
-                if point is not None:
-                    new_points.append([current_view, current_event, point[0], point[1]])
+            for role, point in _measurement_roles(view_data):
+                # Two roles that currently sit at the exact same spot (e.g. a radius fit reusing
+                # the decay vertex) are one physical point in the user's mind, not two - draw it
+                # once. _measurement_role_index_map below records every role each drawn point
+                # represents, so dragging it (see _propagate_measurement_point_drag) moves all of
+                # them together instead of leaving one behind.
+                role_groups.setdefault(_as_xy(point), []).append(role)
+            for xy in role_groups:
+                new_points.append([current_view, current_event, xy[0], xy[1]])
 
         # Rewriting .data here is our own routine canvas rebuild, not a real user action - guard it so
         # _on_measurement_points_changed doesn't treat this rebuild as evidence that points were deleted
@@ -818,6 +844,11 @@ class ParticleTracksWidget(QWidget):
         finally:
             self._syncing = False
         self._last_synced_dims = (current_view, current_event)
+        # Indices are into the freshly-assigned .data above: other_slices occupy [0, len(other_slices)),
+        # our own role-bearing points follow in the same order role_groups was built in.
+        self._measurement_role_index_map = {
+            len(other_slices) + i: roles for i, roles in enumerate(role_groups.values())
+        }
 
         if view_data is not None:
             self.table.setItem(
@@ -1378,9 +1409,6 @@ class ParticleTracksWidget(QWidget):
 
         BOTH_COLOR = "slateblue"
 
-        def as_xy(point):
-            return (round(float(point[0]), 6), round(float(point[1]), 6))
-
         points = []
         border_colors = []
         sizes = []
@@ -1393,8 +1421,8 @@ class ParticleTracksWidget(QWidget):
                 continue
             view_data = particle.views[current_view]
 
-            length_xy = {as_xy(p) for p in (view_data.origin, view_data.decay) if p is not None}
-            radius_xy = {as_xy(p) for p in view_data.track_points}
+            length_xy = {_as_xy(p) for p in (view_data.origin, view_data.decay) if p is not None}
+            radius_xy = {_as_xy(p) for p in view_data.track_points}
 
             for xy in length_xy | radius_xy:
                 is_length = xy in length_xy
@@ -1462,20 +1490,17 @@ class ParticleTracksWidget(QWidget):
 
         view_data = self.data[selected_row].views[current_view]
 
-        def as_xy(point):
-            return (round(float(point[0]), 6), round(float(point[1]), 6))
-
         current_xy_on_canvas = {
-            as_xy(p[2:])
+            _as_xy(p[2:])
             for p in self.layer_measurements.data
             if p[0] == current_view and p[1] == current_event
         }
 
-        if view_data.origin is not None and as_xy(view_data.origin) not in current_xy_on_canvas:
+        if view_data.origin is not None and _as_xy(view_data.origin) not in current_xy_on_canvas:
             view_data.set_origin(None)
-        if view_data.decay is not None and as_xy(view_data.decay) not in current_xy_on_canvas:
+        if view_data.decay is not None and _as_xy(view_data.decay) not in current_xy_on_canvas:
             view_data.set_decay(None)
-        remaining_track_points = [p for p in view_data.track_points if as_xy(p) in current_xy_on_canvas]
+        remaining_track_points = [p for p in view_data.track_points if _as_xy(p) in current_xy_on_canvas]
         if len(remaining_track_points) != len(view_data.track_points):
             view_data.set_track_points(remaining_track_points)
 
