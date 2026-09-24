@@ -1350,6 +1350,10 @@ class ParticleTracksWidget(QWidget):
                 border_width=7,
                 border_width_is_relative=False,
             )
+            # Order matters: drag propagation must run first so every role sharing a dragged
+            # point is already updated before the deletion-reconciliation below inspects them -
+            # see _propagate_measurement_point_drag's docstring.
+            layer.events.data.connect(self._propagate_measurement_point_drag)
             layer.events.data.connect(self._on_measurement_points_changed)
             layer.events.highlight.connect(self._on_measurement_points_changed)
             return layer
@@ -1447,6 +1451,53 @@ class ParticleTracksWidget(QWidget):
             layer.border_color = border_colors
             layer.border_width = [7] * len(points)
             layer.size = sizes
+
+    def _propagate_measurement_point_drag(self, event=None) -> None:
+        """When a canvas point that represents more than one role (e.g. a decay vertex reused
+        as one of the three radius-fit points, per _sync_measurement_layer_to_selected_process's
+        dedup) is dragged, push its new position into every role it represents - otherwise only
+        the role napari happens to report would move, and the others would silently drift apart
+        from what's now a second, invisible point at the old location.
+
+        Connected ahead of _on_measurement_points_changed on the same event, and must run first:
+        once every role sharing this point is updated here, its stored coordinate already matches
+        the canvas, so that method's own deletion-reconciliation (which compares stored vs
+        on-canvas positions) correctly sees nothing missing, rather than mistaking this drag for
+        a deletion of every role but one.
+        """
+        if event is None or event.action != "changed":
+            return
+        if getattr(self, "_restyling", False) or getattr(self, "_syncing", False):
+            return
+
+        role_index_map = getattr(self, "_measurement_role_index_map", {})
+        if not role_index_map:
+            return
+
+        selected_row = self._get_selected_measurement_row()
+        if selected_row is None:
+            return
+
+        current_view = self.viewer.dims.current_step[0]
+        view_data = self.data[selected_row].views[current_view]
+        data = self.layer_measurements.data
+
+        for idx in event.data_indices:
+            roles = role_index_map.get(idx)
+            if not roles:
+                continue
+            new_xy = [float(data[idx][2]), float(data[idx][3])]
+            for role in roles:
+                if role == "origin":
+                    view_data.set_origin(new_xy)
+                elif role == "decay":
+                    view_data.set_decay(new_xy)
+                elif role.startswith("track"):
+                    track_index = int(role[len("track"):])
+                    if track_index < len(view_data.track_points):
+                        updated_track_points = list(view_data.track_points)
+                        updated_track_points[track_index] = new_xy
+                        view_data.set_track_points(updated_track_points)
 
     def _on_measurement_points_changed(self, event=None) -> None:
         """Live auto-calculation and cleanup - fires whenever a point on the measurement
