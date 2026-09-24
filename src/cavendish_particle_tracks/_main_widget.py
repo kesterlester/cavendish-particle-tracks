@@ -1489,20 +1489,20 @@ class ParticleTracksWidget(QWidget):
                         [[current_view, current_event, *point] for point in arc_2d]
                     )
 
-        if arc_shape is None:
-            # Assigning `.data = []` directly onto a Shapes layer that currently holds a shape
-            # crashes in this napari version (a slicing internals bug, not specific to this
-            # layer) - selecting everything and removing it is the reliable way to clear one.
-            if len(layer.data) > 0:
-                layer.selected_data = set(range(len(layer.data)))
-                layer.remove_selected()
-            return
+        # Assigning `.data = [...]` directly onto a Shapes layer - whether to clear it (`= []`)
+        # or to replace its content - crashes in this napari version (a slicing internals bug,
+        # not specific to this layer): selecting everything and removing it is the reliable way
+        # to clear one. `.data = [...]` also silently defaults a new shape's type to "polygon"
+        # (closed - draws an unwanted edge straight back to the start point) regardless of the
+        # shape_type this layer was created with, rather than "path" (open) - `.add(...,
+        # shape_type="path")` is the only reliable way found to set it correctly, so this always
+        # clears first and re-adds, never reassigns `.data` in place.
+        if len(layer.data) > 0:
+            layer.selected_data = set(range(len(layer.data)))
+            layer.remove_selected()
 
-        # Restyling shape_type/edge_color/edge_width explicitly here (as _restyle_measurement_points
-        # does for the points layer) trips an internal napari bug when reassigning .data on a
-        # Shapes layer that already holds a shape - so this relies on the layer's own current_*
-        # style, set once at creation in _setup_radius_arc_layer, applying to newly-added shapes.
-        layer.data = [arc_shape]
+        if arc_shape is not None:
+            layer.add(arc_shape, shape_type="path")
 
     def _sync_other_processes_layer(self) -> None:
         """Populate the read-only 'other processes' layer for the current

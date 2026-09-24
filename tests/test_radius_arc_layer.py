@@ -58,6 +58,11 @@ def test_arc_matches_radius_arc_points_for_the_selected_row(cpt_widget):
     assert np.allclose(got_2d, expected_2d, atol=1e-3)  # shapes layer stores as float32
     # view/event coordinates carried through correctly too
     assert all(p[0] == current_view and p[1] == 0 for p in arc_layer.data[0])
+    # Regression check: a Shapes layer's `.data = [...]` setter silently defaults a new shape's
+    # type to "polygon" (closed - draws an extra edge straight back to the start point) rather
+    # than "path" (open), regardless of what shape_type the layer was created with. Caught live:
+    # an unwanted straight line appeared connecting the arc's two endpoints.
+    assert arc_layer.shape_type == ["path"]
 
 
 def test_arc_updates_when_track_points_change(cpt_widget):
