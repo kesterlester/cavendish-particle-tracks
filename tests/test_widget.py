@@ -202,23 +202,35 @@ def test_show_hide_buttons(cpt_widget: ParticleTracksWidget):
     assert cpt_widget.show_decay_angles_checkbox.isEnabled() is True
 
 
-def test_close_widget(cpt_widget: ParticleTracksWidget, qtbot: QtBot):
-    """Test the close button"""
-    cpt_widget.particle_decays_menu.setCurrentIndex(4)
-    cpt_widget.show()  # the function hideEvent is not called if the widget is not shown
+def _close_napari_window(cpt_widget, monkeypatch, answer):
+    """Close napari's main window (what InterceptClose watches), answering any unsaved-data
+    prompt with `answer`. Returns (whether the close went ahead, the buttons of each prompt
+    shown). The answer is patched in just for this close - see test_delete_particle_ui."""
+    prompts = []
 
-    def check_dialog_and_click_no(dialog):
-        assert isinstance(dialog, QMessageBox)
-        assert dialog.icon() == QMessageBox.Warning
-        assert dialog.text() == (
-            "Closing Cavendish Particle Tracks. Any unsaved data will be lost."
-        )
-        buttonbox = dialog.findChild(QDialogButtonBox)
-        nobutton = buttonbox.children()[2]
-        nobutton.click()
+    def answer_prompt(self):
+        prompts.append(self.standardButtons())
+        return answer
 
-    get_dialog(
-        dialog_trigger=cpt_widget.window().close,
-        dialog_action=check_dialog_and_click_no,
-        time_out=5,
-    )
+    with monkeypatch.context() as m:
+        m.setattr(QMessageBox, "exec", answer_prompt)
+        closed = cpt_widget.viewer.window._qt_window.close()
+    return closed, prompts
+
+
+def test_close_with_nothing_unsaved_does_not_ask(cpt_widget, monkeypatch):
+    closed, prompts = _close_napari_window(cpt_widget, monkeypatch, QMessageBox.Cancel)
+    assert closed
+    assert prompts == []
+
+
+@pytest.mark.parametrize(
+    "answer, expect_closed", [(QMessageBox.Cancel, False), (QMessageBox.Discard, True)]
+)
+def test_close_with_unsaved_data_asks_first(cpt_widget, monkeypatch, answer, expect_closed):
+    """Unsaved data means closing asks Discard/Cancel first; Cancel keeps the window open.
+    Deliberately doesn't check the prompt's wording, only that it's offered and obeyed."""
+    cpt_widget.particle_decays_menu.setCurrentIndex(1)  # an unsaved process
+    closed, prompts = _close_napari_window(cpt_widget, monkeypatch, answer)
+    assert prompts == [QMessageBox.Discard | QMessageBox.Cancel]
+    assert closed is expect_closed
