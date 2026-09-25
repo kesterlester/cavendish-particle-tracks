@@ -59,27 +59,27 @@ def test_add_new_particle_ui(cpt_widget: ParticleTracksWidget):
     assert len(cpt_widget.data) == 1
 
 
-def test_delete_particle_ui(cpt_widget: ParticleTracksWidget):
-    """Tests the removal of a particle from the table"""
+@pytest.mark.parametrize(
+    "answer, expected_rows", [(QMessageBox.Yes, 0), (QMessageBox.Cancel, 1)]
+)
+def test_delete_particle_ui(cpt_widget: ParticleTracksWidget, monkeypatch, answer, expected_rows):
+    """Deleting a process removes it from the table and data only if the confirmation box is
+    answered Yes (its real buttons are Yes/Cancel - see _on_click_delete_process). The answer is
+    patched in just for the delete call: conftest's autouse fixture otherwise makes every message
+    box answer Discard, and leaving Cancel in place would also make napari's own teardown refuse
+    to close the viewer at the unsaved-data prompt.
+    """
     cpt_widget.particle_decays_menu.setCurrentIndex(1)
 
     assert cpt_widget.table.rowCount() == 1
     assert len(cpt_widget.data) == 1
 
-    def close_dialog(dialog):
-        buttonbox = dialog.findChild(QDialogButtonBox)
-        yesbutton = buttonbox.children()[1]
-        yesbutton.click()
+    with monkeypatch.context() as m:
+        m.setattr(QMessageBox, "exec", lambda self: answer)
+        cpt_widget._on_click_delete_process()
 
-    # Open and retrieve file dialog
-    get_dialog(
-        dialog_trigger=cpt_widget._on_click_delete_process,
-        dialog_action=close_dialog,
-        time_out=5,
-    )
-
-    assert cpt_widget.table.rowCount() == 0
-    assert len(cpt_widget.data) == 0
+    assert cpt_widget.table.rowCount() == expected_rows
+    assert len(cpt_widget.data) == expected_rows
 
 
 @pytest.mark.parametrize(
