@@ -83,6 +83,9 @@ namespaces = false
 [tool.setuptools_scm]
 write_to = "src/cavendish_particle_tracks/_version.py"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.black]
 line-length = 90
 target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
