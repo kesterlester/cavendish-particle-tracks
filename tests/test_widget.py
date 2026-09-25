@@ -174,25 +174,20 @@ def test_load_data(
 
 
 def test_show_hide_buttons(cpt_widget: ParticleTracksWidget):
-    """Test the show/hide buttons"""
+    """Delete becomes usable once a process is selected; Decay Angles only for the Λ⁰ process
+    (the one with decay angles to measure)."""
     cpt_widget.viewer.add_image(np.random.random((100, 100)), name=IMAGE_LAYER_NAME)
-    # ideally would like to test isVisible instead of isEnabled, but that requires showing the widget
-    # need to think about how to do that, or if it's worth it
     assert cpt_widget.particle_decays_menu.isEnabled() is True
     assert cpt_widget.delete_process.isEnabled() is False
-    assert cpt_widget.radius_button.isEnabled() is False
-    assert cpt_widget.length_button.isEnabled() is False
-    assert cpt_widget.show_decay_angles_checkbox.isEnabled() is False
-    cpt_widget.particle_decays_menu.setCurrentIndex(1)
+    assert cpt_widget.decay_angles_nav_button.isEnabled() is False
+
+    cpt_widget.particle_decays_menu.setCurrentIndex(1)  # Σ⁺ ⇨ p + π⁰, newly added and selected
     assert cpt_widget.delete_process.isEnabled() is True
-    assert cpt_widget.radius_button.isEnabled() is True
-    assert cpt_widget.length_button.isEnabled() is True
-    assert cpt_widget.show_decay_angles_checkbox.isEnabled() is False
-    cpt_widget.particle_decays_menu.setCurrentIndex(4)
+    assert cpt_widget.decay_angles_nav_button.isEnabled() is False
+
+    cpt_widget.particle_decays_menu.setCurrentIndex(4)  # Λ⁰ ⇨ p + π⁻, newly added and selected
     assert cpt_widget.delete_process.isEnabled() is True
-    assert cpt_widget.radius_button.isEnabled() is False
-    assert cpt_widget.length_button.isEnabled() is True
-    assert cpt_widget.show_decay_angles_checkbox.isEnabled() is True
+    assert cpt_widget.decay_angles_nav_button.isEnabled() is True
 
 
 def _close_napari_window(cpt_widget, monkeypatch, answer):
