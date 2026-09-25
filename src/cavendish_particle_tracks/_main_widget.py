@@ -910,10 +910,29 @@ class ParticleTracksWidget(QWidget):
             self.layer_measurements.size = sizes
             self.layer_measurements.symbol = symbols
             self.layer_measurements.face_color = face_colors
-            self.layer_measurements.current_border_color = DEFAULT_BORDER_COLOR
-            self.layer_measurements.current_border_width = DEFAULT_BORDER_WIDTH
-            self.layer_measurements.current_symbol = "disc"
-            self.layer_measurements.current_face_color = "white"
+            # The current_* setters below aren't just "next new point" defaults - napari also
+            # applies them live to whatever's in layer.selected_data right now, indexing straight
+            # into the arrays just replaced above. Found live (full traceback): pressing napari's
+            # own native delete-point key/action calls Points.remove_selected(), which shrinks
+            # .data and - VIA THE SAME layer.events.highlight cascade that reaches
+            # _restyle_measurement_points - reaches here BEFORE remove_selected() has reached its
+            # own trailing `self.selected_data = set()` cleanup a few lines later. selected_data
+            # at that instant still names the just-deleted point's OLD index, which is now out of
+            # bounds against the just-shrunk arrays - an IndexError from napari's own internals,
+            # not a sign our own colour/symbol/size data is wrong (those were already correctly
+            # reassigned above, at the new length, with no index-based access to trip over).
+            # Harmless to skip this one tick: _restyle_measurement_points runs again on essentially
+            # every subsequent canvas event, so the "next new point" default self-heals immediately.
+            try:
+                self.layer_measurements.current_border_color = DEFAULT_BORDER_COLOR
+                self.layer_measurements.current_border_width = DEFAULT_BORDER_WIDTH
+                self.layer_measurements.current_symbol = "disc"
+                self.layer_measurements.current_face_color = "white"
+            except IndexError:
+                _debug_trace(
+                    "restyle: SKIP current_* defaults - napari's own selected_data still named a "
+                    "just-deleted point's stale index (see _restyle_measurement_points comment)"
+                )
             # Force the repaint explicitly, rather than relying on one of the assignments above
             # to trigger it as a side effect - with border_width now staying at a single uniform
             # value, napari may treat that particular assignment as a no-op and skip its own
