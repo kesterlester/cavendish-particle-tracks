@@ -18,36 +18,29 @@ from cavendish_particle_tracks._main_widget import (
 from .conftest import get_dialog
 
 
-@pytest.mark.parametrize("bypass", [True, False])
 @pytest.mark.parametrize("docking_area", ["left", "bottom"])
-def test_open_widget(make_napari_viewer, bypass, docking_area):
-    """Test the opening of the widget"""
-    viewer = make_napari_viewer()
-    widget = ParticleTracksWidget(napari_viewer=viewer, docking_area=docking_area)
-    widget.bypass_force_load_data = bypass
+def test_open_widget(make_napari_viewer, docking_area):
+    """The widget opens in both layouts (they build their buttons differently), and only
+    "Load images" is usable until an image layer exists."""
+    widget = ParticleTracksWidget(napari_viewer=make_napari_viewer(), docking_area=docking_area)
     assert widget.isVisible() is False
     widget.show()
     assert widget.isVisible() is True
 
-    if bypass:
-        return
-
-    # Check the widget behavior before and after loading the data
+    assert widget.load_button.isEnabled() is True
     assert widget.particle_decays_menu.isEnabled() is False
-    assert widget.radius_button.isEnabled() is False
+    assert widget.load_data_button.isEnabled() is False
     assert widget.delete_process.isEnabled() is False
-    assert widget.length_button.isEnabled() is False
-    assert widget.stereoshift_button.isEnabled() is False
-    assert widget.show_decay_angles_checkbox.isEnabled() is False
+    assert widget.decay_angles_nav_button.isEnabled() is False
 
+    # a tiny in-memory stand-in for loaded images - no files involved
     widget.viewer.add_image(np.random.random((100, 100)), name=IMAGE_LAYER_NAME)
 
+    assert widget.load_button.isEnabled() is False
     assert widget.particle_decays_menu.isEnabled() is True
-    assert widget.radius_button.isEnabled() is False
+    assert widget.load_data_button.isEnabled() is True
     assert widget.delete_process.isEnabled() is False
-    assert widget.length_button.isEnabled() is False
-    assert widget.stereoshift_button.isEnabled() is False
-    assert widget.show_decay_angles_checkbox.isEnabled() is False
+    assert widget.decay_angles_nav_button.isEnabled() is False
 
 
 def test_add_new_particle_ui(cpt_widget: ParticleTracksWidget):
