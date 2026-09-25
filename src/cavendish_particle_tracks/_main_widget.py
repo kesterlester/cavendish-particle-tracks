@@ -99,6 +99,22 @@ def _debug_trace(msg: str) -> None:
         _debug_trace_logger.debug(msg)
 
 
+class _NumericTableWidgetItem(QTableWidgetItem):
+    """A process-table cell that sorts by numeric value rather than display text. Plain
+    QTableWidgetItem sorts lexicographically (e.g. event 10 sorts before event 2), which is
+    wrong for every numeric column in this table (event_number, radius_px, ...). Falls back to
+    the default text comparison for anything that doesn't parse as a float - a process with no
+    radius fit yet shows a blank cell, and blanks should sort together predictably rather than
+    raising or silently comparing as zero.
+    """
+
+    def __lt__(self, other):
+        try:
+            return float(self.text()) < float(other.text())
+        except (ValueError, TypeError):
+            return super().__lt__(other)
+
+
 def _as_xy(point) -> tuple[float, float]:
     """Round a 2D point to a hashable, comparison-stable (x, y) tuple - used wherever canvas
     point positions need to be compared or grouped by "same place", since raw floats coming
@@ -363,6 +379,9 @@ class ParticleTracksWidget(QWidget):
 
         # Data analysis
         self.data: list[ParticleDecay] = []
+        # Monotonically increasing - see _assign_row_id. Never reused, even across deletes, so a
+        # stale id from a just-deleted row can never accidentally match a later, unrelated one.
+        self._next_row_id = 0
         import copy
         self._data_at_last_save = copy.deepcopy(self.data) # Need deepcopy as otherwise changes within ParticleData objects are not spotted!
 
@@ -564,14 +583,64 @@ class ParticleTracksWidget(QWidget):
         )
         return selected_points
 
-    def _get_selected_row(self) -> np.array:
-        """Returns the selected row in the table.
+    def _assign_row_id(self, particle) -> None:
+        """Stamp `particle` with a fresh, stable, never-reused id (self._next_row_id) - the
+        anchor _get_selected_row() uses to find the right self.data entry regardless of how the
+        table is currently sorted (see _get_selected_row and _on_table_header_clicked). Call
+        this exactly once per ParticleDecay/CalibrationRow, at the point it's created (including
+        freshly loading each row of a saved session - a loaded object was never assigned one).
 
-        Note: due to our selection mode only one row selection is possible.
+        Deliberately a plain runtime attribute, not a dataclass field: it's a
+        _main_widget.py-level UI bookkeeping detail, not domain data, so it must never appear in
+        vars_to_save() and end up written to a saved CSV (it starts with "_", which
+        vars_to_save() already filters out - see ParticleDecay.vars_to_save).
+        """
+        particle._row_id = self._next_row_id
+        self._next_row_id += 1
+
+    def _get_selected_row(self) -> int:
+        """Returns the index into self.data for the currently selected table row.
+
+        Deliberately NOT just the table's own visual row position (QModelIndex.row()). Now that
+        clicking a column header re-sorts the table (see _on_table_header_clicked),
+        self.data[visual_row] is only guaranteed to be right for original, creation-order
+        display - the whole point of sorting is to break that. Every row instead carries its
+        self.data index in a hidden, never-displayed "_row_id" column (see _assign_row_id) that
+        survives any reordering; this looks THAT up and returns the matching self.data index.
+
+        Note: due to our selection mode only one row selection is possible. Raises IndexError
+        when nothing is selected, same as before - existing callers already rely on that.
         """
         select = self.table.selectionModel()
         rows = select.selectedRows()
-        return rows[0].row()
+        visual_row = rows[0].row()
+        row_id = int(self.table.item(visual_row, self._get_table_column_index("_row_id")).text())
+        for data_index, particle in enumerate(self.data):
+            if getattr(particle, "_row_id", None) == row_id:
+                return data_index
+        raise IndexError(
+            f"Selected table row names _row_id={row_id}, but no self.data entry has it - "
+            "table/data desync (every self.data entry must get one via _assign_row_id)."
+        )
+
+    def _table_row_for_data_index(self, data_index: int) -> int:
+        """The inverse of _get_selected_row: given an index into self.data, returns the CURRENT
+        visual row that process occupies in the table right now. Needed everywhere code writes a
+        cell for "the process at self.data[i]" - e.g. refreshing its radius_px after a drag - since
+        that's no longer necessarily table row i once the table's been sorted (see
+        _on_table_header_clicked). Looks up self.data[data_index]'s own _row_id (see
+        _assign_row_id) against every row's hidden _row_id cell, the same stable anchor
+        _get_selected_row uses in the other direction.
+        """
+        target_id = self.data[data_index]._row_id
+        id_col = self._get_table_column_index("_row_id")
+        for table_row in range(self.table.rowCount()):
+            if int(self.table.item(table_row, id_col).text()) == target_id:
+                return table_row
+        raise IndexError(
+            f"self.data[{data_index}]'s _row_id={target_id} isn't in the table - "
+            "table/data desync."
+        )
 
     def _get_selected_measurement_row(self):
         """Like _get_selected_row(), but returns None for both "nothing selected" and
@@ -595,12 +664,27 @@ class ParticleTracksWidget(QWidget):
         self.columns = list(np.vars_to_save())
         self.columns_show_summary = np.vars_to_show(False)
         self.columns_show_per_view = np.vars_to_show(True)
+        # A hidden, never-displayed column carrying each row's stable _row_id (see
+        # _assign_row_id/_get_selected_row) - deliberately not part of vars_to_save()/either
+        # show-list above, so _set_table_visible_vars's hide-everything-then-show-only-the-list
+        # pass leaves it hidden automatically on every mode toggle, with no special-casing needed.
+        self.columns.append("_row_id")
         out = QTableWidget(0, len(self.columns))
         out.setHorizontalHeaderLabels(self.columns)
         out.setSelectionBehavior(QAbstractItemView.SelectRows)
         out.setSelectionMode(QAbstractItemView.SingleSelection)
         out.setEditTriggers(QAbstractItemView.NoEditTriggers)
         out.setSelectionBehavior(QTableWidget.SelectRows)
+        out.setColumnHidden(self.columns.index("_row_id"), True)
+
+        # Sorting is deliberately NOT the continuous setSortingEnabled(True) behaviour, which
+        # re-sorts on every single programmatic cell write too - this app writes live measurement
+        # cells constantly while the user drags a point (see _refresh_per_view_breakdown_cells and
+        # friends), and having the row someone's actively working on jump to a new position mid-
+        # drag would be jarring. Instead, a header click explicitly triggers a one-off sort, via
+        # _on_table_header_clicked - never anything else.
+        out.horizontalHeader().setSortIndicatorShown(True)
+        out.horizontalHeader().sectionClicked.connect(self._on_table_header_clicked)
 
         # Summary-mode columns are never shown at the same time as the breakdown-mode ones, so
         # each group can just get its own fixed width rule up front, with no "which mode is
@@ -628,6 +712,28 @@ class ParticleTracksWidget(QWidget):
         out.setColumnWidth(saved_vertices_idx, 140)
         out.horizontalHeader().setSectionResizeMode(saved_vertices_idx, QHeaderView.ResizeToContents)
         return out
+
+    def _on_table_header_clicked(self, logical_index: int) -> None:
+        """Sort the table by the clicked column - a one-off "sort now" action, toggling
+        ascending/descending on repeat clicks of the same column (standard header-click
+        behaviour). See _set_up_table's comment on why this is wired by hand via sectionClicked
+        rather than QTableWidget's own continuous setSortingEnabled(True).
+
+        Sorting only ever reorders which table ROW each process appears in - self.data's own
+        order, and every process's identity, is untouched (see _get_selected_row, which looks
+        rows up by their hidden _row_id rather than position for exactly this reason).
+        """
+        header = self.table.horizontalHeader()
+        if header.sortIndicatorSection() == logical_index:
+            order = (
+                Qt.DescendingOrder
+                if header.sortIndicatorOrder() == Qt.AscendingOrder
+                else Qt.AscendingOrder
+            )
+        else:
+            order = Qt.AscendingOrder
+        header.setSortIndicator(logical_index, order)
+        self.table.sortItems(logical_index, order)
 
     def _set_table_visible_vars(self, show_per_view) -> None:
         for _ in range(len(self.columns)):
@@ -668,15 +774,28 @@ class ParticleTracksWidget(QWidget):
         return -1
 
     def _add_or_update_table_row(self, row_index: int, particle) -> None:
-        """Populate a table row's index/name/event_number/saved_vertices cells from a
-        ParticleDecay or CalibrationRow already sitting at self.data[row_index]. Shared
-        by process creation, calibration row sync, and loading a saved session, so all
-        three ways a row can appear stay in sync automatically instead of drifting apart.
+        """Populate a brand new table row's index/name/event_number/saved_vertices/_row_id cells
+        from a ParticleDecay or CalibrationRow already sitting at self.data[row_index]. Shared
+        by process creation, calibration row sync, and loading a saved session, so all three ways
+        a row can appear stay in sync automatically instead of drifting apart. Only ever called
+        for a row just created with .insertRow() - never to update an existing one - so
+        row_index is a genuine, uncontested position, not something that could have already
+        drifted from self.data's index by the time this runs.
         """
-        self.table.setItem(row_index, self._get_table_column_index("index"), QTableWidgetItem(str(particle.index)))
+        self.table.setItem(
+            row_index, self._get_table_column_index("index"), _NumericTableWidgetItem(str(particle.index))
+        )
         self.table.setItem(row_index, self._get_table_column_index("name"), QTableWidgetItem(particle.name))
-        self.table.setItem(row_index, self._get_table_column_index("event_number"),
-                           QTableWidgetItem(str(particle.event_number)))
+        self.table.setItem(
+            row_index,
+            self._get_table_column_index("event_number"),
+            _NumericTableWidgetItem(str(particle.event_number)),
+        )
+        self.table.setItem(
+            row_index,
+            self._get_table_column_index("_row_id"),
+            _NumericTableWidgetItem(str(particle._row_id)),
+        )
         self._refresh_saved_vertices_cell(row_index)
 
     def _rebuild_table_from_data(self) -> None:
@@ -701,21 +820,22 @@ class ParticleTracksWidget(QWidget):
             return
         current_view = self.viewer.dims.current_step[0]
         view_data = particle.views[current_view]
+        table_row = self._table_row_for_data_index(row_index)
         self.table.setItem(
-            row_index, self._get_table_column_index("decay_length_px"),
-            QTableWidgetItem(self._display_value(round_px(view_data.length_px))),
+            table_row, self._get_table_column_index("decay_length_px"),
+            _NumericTableWidgetItem(self._display_value(round_px(view_data.length_px))),
         )
         self.table.setItem(
-            row_index, self._get_table_column_index("radius_px"),
-            QTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
+            table_row, self._get_table_column_index("radius_px"),
+            _NumericTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
         )
         self.table.setItem(
-            row_index, self._get_table_column_index("phi_proton"),
-            QTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
+            table_row, self._get_table_column_index("phi_proton"),
+            _NumericTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
         )
         self.table.setItem(
-            row_index, self._get_table_column_index("phi_pion"),
-            QTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
+            table_row, self._get_table_column_index("phi_pion"),
+            _NumericTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
         )
 
     def _refresh_all_measurement_cells(self) -> None:
@@ -736,19 +856,20 @@ class ParticleTracksWidget(QWidget):
         particle = self.data[selected_row]
         if isinstance(particle, CalibrationRow):
             return
+        table_row = self._table_row_for_data_index(selected_row)
         for view_number in (1, 2, 3):
             for base_col in ("radius_px", "decay_length_px", "phi_proton", "phi_pion"):
                 col_name = f"v{view_number}_{base_col}"
                 value = getattr(particle, col_name)
                 self.table.setItem(
-                    selected_row,
+                    table_row,
                     self._get_table_column_index(col_name),
-                    QTableWidgetItem(self._display_value(value)),
+                    _NumericTableWidgetItem(self._display_value(value)),
                 )
 
     def _refresh_saved_vertices_cell(self, selected_row: int) -> None:
         self.table.setItem(
-            selected_row,
+            self._table_row_for_data_index(selected_row),
             self._get_table_column_index("saved_vertices"),
             QTableWidgetItem(str(self.data[selected_row].saved_vertices)),
         )
@@ -1131,15 +1252,16 @@ class ParticleTracksWidget(QWidget):
         self._measurement_role_index_map_valid = True
 
         if view_data is not None:
+            table_row = self._table_row_for_data_index(selected_row)
             self.table.setItem(
-                selected_row,
+                table_row,
                 self._get_table_column_index("decay_length_px"),
-                QTableWidgetItem(self._display_value(round_px(view_data.length_px))),
+                _NumericTableWidgetItem(self._display_value(round_px(view_data.length_px))),
             )
             self.table.setItem(
-                selected_row,
+                table_row,
                 self._get_table_column_index("radius_px"),
-                QTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
+                _NumericTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
             )
         if selected_row is not None:
             self._refresh_per_view_breakdown_cells(selected_row)
@@ -1250,15 +1372,16 @@ class ParticleTracksWidget(QWidget):
             return
         current_view = self.viewer.dims.current_step[0]
         view_data = self.data[selected_row].views[current_view]
+        table_row = self._table_row_for_data_index(selected_row)
         self.table.setItem(
-            selected_row,
+            table_row,
             self._get_table_column_index("phi_proton"),
-            QTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
+            _NumericTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
         )
         self.table.setItem(
-            selected_row,
+            table_row,
             self._get_table_column_index("phi_pion"),
-            QTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
+            _NumericTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
         )
         self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
@@ -1371,15 +1494,16 @@ class ParticleTracksWidget(QWidget):
             [list(map(float, pion_line[0])), list(map(float, pion_line[1]))],
         ])
 
+        table_row = self._table_row_for_data_index(selected_row)
         self.table.setItem(
-            selected_row,
+            table_row,
             self._get_table_column_index("phi_proton"),
-            QTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
+            _NumericTableWidgetItem(self._display_value(round_angle(view_data.phi_proton))),
         )
         self.table.setItem(
-            selected_row,
+            table_row,
             self._get_table_column_index("phi_pion"),
-            QTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
+            _NumericTableWidgetItem(self._display_value(round_angle(view_data.phi_pion))),
         )
         self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
@@ -1465,6 +1589,10 @@ class ParticleTracksWidget(QWidget):
             return
         self.table.clearSelection()
         self.data = data
+        # A freshly loaded row has never been through _on_click_new_process/the calibration-sync
+        # branch, so it has no _row_id yet - assign one now, same as either of those would have.
+        for particle in self.data:
+            self._assign_row_id(particle)
         self._rebuild_table_from_data()
         # Restore calibration: generic templates come straight from the loaded session;
         # event_views is rebuilt from the just-restored CalibrationRow entries rather than also
@@ -2264,15 +2392,16 @@ class ParticleTracksWidget(QWidget):
             _debug_trace(f"reconcile: CLEARING track_points {view_data.track_points} -> {remaining_track_points}")
             view_data.set_track_points(remaining_track_points)
 
+        table_row = self._table_row_for_data_index(selected_row)
         self.table.setItem(
-            selected_row,
+            table_row,
             self._get_table_column_index("decay_length_px"),
-            QTableWidgetItem(self._display_value(round_px(view_data.length_px))),
+            _NumericTableWidgetItem(self._display_value(round_px(view_data.length_px))),
         )
         self.table.setItem(
-            selected_row,
+            table_row,
             self._get_table_column_index("radius_px"),
-            QTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
+            _NumericTableWidgetItem(self._display_value(round_px(view_data.radius_px))),
         )
         self._refresh_per_view_breakdown_cells(selected_row)
         self._refresh_saved_vertices_cell(selected_row)
@@ -2315,8 +2444,11 @@ class ParticleTracksWidget(QWidget):
                 # deliberately blocked for calibration rows (10d-3), so deleting every stamp is the
                 # only way a student has to remove one - this makes that action actually complete.
                 if existing_row_index is not None:
+                    # Must translate BEFORE deleting - _table_row_for_data_index reads
+                    # self.data[existing_row_index]._row_id, gone once the entry's deleted.
+                    table_row = self._table_row_for_data_index(existing_row_index)
                     del self.data[existing_row_index]
-                    self.table.removeRow(existing_row_index)
+                    self.table.removeRow(table_row)
                 continue
 
             if existing_row_index is not None:
@@ -2324,6 +2456,7 @@ class ParticleTracksWidget(QWidget):
                 self._refresh_saved_vertices_cell(existing_row_index)
             else:
                 new_row = CalibrationRow(event_number=event_number, views=views)
+                self._assign_row_id(new_row)
                 self.data.append(new_row)
                 self.table.insertRow(self.table.rowCount())
                 row_index = self.table.rowCount() - 1
@@ -2352,13 +2485,17 @@ class ParticleTracksWidget(QWidget):
             new_particle.event_number = self.viewer.dims.current_step[1]
             new_particle.view_number = self.viewer.dims.current_step[0]
 
+        self._assign_row_id(new_particle)
         self.data += [new_particle]
 
-        # add particle (== new row) to the table and select it
+        # add particle (== new row) to the table and select it. _add_or_update_table_row must run
+        # BEFORE selectRow, not after: selectRow synchronously fires _on_row_selection_changed,
+        # which calls _get_selected_row(), which reads this row's _row_id cell - selecting the
+        # row before that cell (or any other) has actually been written would crash.
         self.table.insertRow(self.table.rowCount())
         row_index = self.table.rowCount() - 1
-        self.table.selectRow(row_index)
         self._add_or_update_table_row(row_index, new_particle)
+        self.table.selectRow(row_index)
 
         print(self.data[-1])
         self.particle_decays_menu.setCurrentIndex(0)
@@ -2389,8 +2526,11 @@ class ParticleTracksWidget(QWidget):
             return_code = confirmation_dialog.exec()
 
             if return_code == QMessageBox.Yes:
+                # Must translate BEFORE deleting - _table_row_for_data_index reads
+                # self.data[selected_row]._row_id, which no longer exists once the entry's gone.
+                table_row = self._table_row_for_data_index(selected_row)
                 del self.data[selected_row]
-                self.table.removeRow(selected_row)
+                self.table.removeRow(table_row)
 
     # def _propagate_magnification(self, a: float, b: float) -> None:
     #     """Assigns a and b to the class magnification parameters and to each of the particles in data"""
