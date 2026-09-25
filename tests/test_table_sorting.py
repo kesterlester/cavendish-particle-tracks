@@ -108,6 +108,10 @@ def test_clicking_event_number_header_sorts_numerically_not_lexicographically(ma
 
 
 def test_clicking_the_same_header_twice_toggles_ascending_and_descending(make_napari_viewer):
+    """Calls _on_table_header_clicked directly - covers the toggle LOGIC itself, but see
+    test_a_real_mouse_click_on_the_header_toggles_ascending_and_descending_too below for why a
+    direct call alone isn't sufficient coverage for this specific method.
+    """
     cpt_widget = _make_widget(make_napari_viewer)
     _add_process_at_event(cpt_widget, 2)
     _add_process_at_event(cpt_widget, 4)
@@ -119,6 +123,39 @@ def test_clicking_the_same_header_twice_toggles_ascending_and_descending(make_na
 
     cpt_widget._on_table_header_clicked(col)
     assert _table_events_in_visual_order(cpt_widget) == [4, 3, 2]
+
+
+def test_a_real_mouse_click_on_the_header_toggles_ascending_and_descending_too(make_napari_viewer):
+    """Regression test for a bug found live: every real click landed on descending, never
+    ascending, even though calling _on_table_header_clicked directly (see the test above)
+    toggled correctly. Root cause: QHeaderView.setSortIndicatorShown(True) alone makes the
+    header natively move its own sort indicator onto the clicked section (always defaulting to
+    ascending) as a visual affordance BEFORE _on_table_header_clicked even runs - a direct
+    method call skips that native step entirely, so only a real click exercises it. Simulating
+    an actual QTest.mouseClick on the header is what's needed to catch this - _on_table_header_clicked
+    now tracks its own sort state instead of reading the header back to guard against it.
+    """
+    from qtpy.QtCore import QPoint, Qt
+    from qtpy.QtTest import QTest
+
+    cpt_widget = _make_widget(make_napari_viewer)
+    _add_process_at_event(cpt_widget, 2)
+    _add_process_at_event(cpt_widget, 4)
+    _add_process_at_event(cpt_widget, 3)
+
+    col = _event_number_column(cpt_widget)
+    header = cpt_widget.table.horizontalHeader()
+    cpt_widget.table.show()
+    click_pos = QPoint(header.sectionViewportPosition(col) + 5, 5)
+
+    QTest.mouseClick(header.viewport(), Qt.LeftButton, Qt.NoModifier, click_pos)
+    assert _table_events_in_visual_order(cpt_widget) == [2, 3, 4]
+
+    QTest.mouseClick(header.viewport(), Qt.LeftButton, Qt.NoModifier, click_pos)
+    assert _table_events_in_visual_order(cpt_widget) == [4, 3, 2]
+
+    QTest.mouseClick(header.viewport(), Qt.LeftButton, Qt.NoModifier, click_pos)
+    assert _table_events_in_visual_order(cpt_widget) == [2, 3, 4]
 
 
 def test_sorting_groups_by_event_then_preserves_creation_order_within_a_group(make_napari_viewer):

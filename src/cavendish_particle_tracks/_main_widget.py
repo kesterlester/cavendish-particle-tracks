@@ -382,6 +382,10 @@ class ParticleTracksWidget(QWidget):
         # Monotonically increasing - see _assign_row_id. Never reused, even across deletes, so a
         # stale id from a just-deleted row can never accidentally match a later, unrelated one.
         self._next_row_id = 0
+        # (column, order) of the table's last explicit header-click sort, or None before the
+        # first click - see _on_table_header_clicked for why this can't just be read back from
+        # the header's own sortIndicatorSection()/sortIndicatorOrder() instead.
+        self._table_sort_state: tuple[int, "Qt.SortOrder"] | None = None
         import copy
         self._data_at_last_save = copy.deepcopy(self.data) # Need deepcopy as otherwise changes within ParticleData objects are not spotted!
 
@@ -722,17 +726,24 @@ class ParticleTracksWidget(QWidget):
         Sorting only ever reorders which table ROW each process appears in - self.data's own
         order, and every process's identity, is untouched (see _get_selected_row, which looks
         rows up by their hidden _row_id rather than position for exactly this reason).
+
+        Deliberately tracks the last sort itself (self._table_sort_state) instead of reading
+        header.sortIndicatorSection()/sortIndicatorOrder() back to decide the toggle - found
+        live (every click landed on descending, never ascending): setSortIndicatorShown(True)
+        alone makes QHeaderView natively move its OWN indicator onto the clicked section (always
+        defaulting to ascending) as soon as the click is processed, purely a visual affordance,
+        independent of setSortingEnabled and before this handler even runs. Reading the header
+        back here would just be reading Qt's own just-applied default, not "what was showing
+        before this click" - toggling against that landed on descending every single time,
+        regardless of the true previous state.
         """
-        header = self.table.horizontalHeader()
-        if header.sortIndicatorSection() == logical_index:
-            order = (
-                Qt.DescendingOrder
-                if header.sortIndicatorOrder() == Qt.AscendingOrder
-                else Qt.AscendingOrder
-            )
+        if self._table_sort_state is not None and self._table_sort_state[0] == logical_index:
+            _, previous_order = self._table_sort_state
+            order = Qt.DescendingOrder if previous_order == Qt.AscendingOrder else Qt.AscendingOrder
         else:
             order = Qt.AscendingOrder
-        header.setSortIndicator(logical_index, order)
+        self._table_sort_state = (logical_index, order)
+        self.table.horizontalHeader().setSortIndicator(logical_index, order)
         self.table.sortItems(logical_index, order)
 
     def _set_table_visible_vars(self, show_per_view) -> None:
