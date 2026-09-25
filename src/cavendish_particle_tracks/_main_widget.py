@@ -18,6 +18,7 @@ import dask.array
 import napari
 import numpy as np
 from dask_image.imread import imread
+from vispy.color import Color
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QAction,
@@ -152,6 +153,18 @@ def _role_face_color(is_origin: bool, is_decay: bool) -> str:
     return "white"
 
 
+def _faded_color(name: str, alpha: float = 0.35) -> np.ndarray:
+    """The same named colour, but at reduced opacity - used to draw an OTHER process's radius arc
+    / origin-decay arrow noticeably fainter than the selected process's own (bold, full-alpha)
+    decorator, the same "theirs vs mine" distinction _sync_other_processes_layer already makes for
+    points via whole-layer opacity. Shapes layers don't have a per-shape opacity, only a per-shape
+    RGBA edge/face colour, so the fade has to be baked into the colour itself here.
+    """
+    rgba = np.array(Color(name).rgba)
+    rgba[3] = alpha
+    return rgba
+
+
 def get_singleton(viewer=None, docking_area: str = "bottom", data_folder=None):
     """Return the singleton ParticleTracksWidget, creating it if necessary."""
     global _singleton_instance
@@ -226,6 +239,8 @@ class ParticleTracksWidget(QWidget):
         self.show_origin_decay_checkbox.setChecked(True)
         self.show_all_processes_checkbox = QCheckBox("Show all processes")
         self.show_all_processes_checkbox.setChecked(False)
+        self.show_decorators_checkbox = QCheckBox("Show arcs/arrows")
+        self.show_decorators_checkbox.setChecked(True)
         self.show_fiducials_checkbox = QCheckBox("Show fiducial markers")
         self.show_fiducials_checkbox.setChecked(True)
         self.show_per_view_columns_checkbox = QCheckBox("Show per-view breakdown")
@@ -264,6 +279,14 @@ class ParticleTracksWidget(QWidget):
         self.show_track_vertices_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
         self.show_origin_decay_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
         self.show_all_processes_checkbox.stateChanged.connect(lambda _: self._sync_other_processes_layer())
+        # The decorators (radius arc, O-D arrow) aren't drawn from _restyle_measurement_points'
+        # own early-return path when the selected process has no points of its own yet, so - like
+        # show_all_processes_checkbox above - these are wired directly to the refresh calls rather
+        # than relying solely on _restyle_measurement_points to reach them.
+        self.show_decorators_checkbox.stateChanged.connect(lambda _: self._refresh_radius_arc())
+        self.show_decorators_checkbox.stateChanged.connect(lambda _: self._refresh_origin_decay_arrow())
+        self.show_all_processes_checkbox.stateChanged.connect(lambda _: self._refresh_radius_arc())
+        self.show_all_processes_checkbox.stateChanged.connect(lambda _: self._refresh_origin_decay_arrow())
         #self.stereoshift_button.clicked.connect(self._on_click_stereoshift)
         #self.apply_magnification_button.toggled.connect(
         #    self._on_click_apply_magnification
@@ -287,6 +310,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_origin_decay_checkbox, 3, 1)
             self.buttonbox.addWidget(self.show_fiducials_checkbox, 4, 0)
             self.buttonbox.addWidget(self.show_all_processes_checkbox, 4, 1)
+            self.buttonbox.addWidget(self.show_decorators_checkbox, 5, 0)
             # self.buttonbox.addWidget(self.stereoshift_button, 5, 0)
             # self.buttonbox.addWidget(self.apply_magnification_button, 4, 1)
 
@@ -316,6 +340,7 @@ class ParticleTracksWidget(QWidget):
             self.buttonbox.addWidget(self.show_origin_decay_checkbox)
             self.buttonbox.addWidget(self.show_fiducials_checkbox)
             self.buttonbox.addWidget(self.show_all_processes_checkbox)
+            self.buttonbox.addWidget(self.show_decorators_checkbox)
             self.buttonbox.addWidget(self.show_per_view_columns_checkbox)
             self.buttonbox.addWidget(self.table)
             # self.buttonbox.addWidget(self.apply_magnification_button)
@@ -902,6 +927,28 @@ class ParticleTracksWidget(QWidget):
             # that from running a second, interleaved clear-then-add cycle on top of the first.
             self._refresh_radius_arc()
             self._refresh_origin_decay_arrow()
+        finally:
+            self._restyling = False
+
+    def _run_guarded_against_restyle_reentrancy(self, body) -> None:
+        """Run `body` (a zero-argument callable) with the same `_restyling` guard
+        _restyle_measurement_points uses - shared so any method whose own layer mutations can
+        trigger a reentrant call chain back into _restyle_measurement_points (currently
+        _do_refresh_radius_arc and _do_refresh_origin_decay_arrow, called both from inside that
+        method's own guarded block AND directly from checkbox toggles) is protected either way,
+        without double-acquiring or releasing a guard some enclosing call already holds.
+
+        If the guard is already held (this call is nested inside _restyle_measurement_points'
+        own guarded block, or inside another guarded call), just run `body` - the existing
+        outermost acquisition already protects it. Otherwise acquire the guard for `body`'s
+        duration, exactly as _restyle_measurement_points itself does.
+        """
+        if getattr(self, "_restyling", False):
+            body()
+            return
+        self._restyling = True
+        try:
+            body()
         finally:
             self._restyling = False
 
@@ -1576,25 +1623,43 @@ class ParticleTracksWidget(QWidget):
         self.viewer.layers.selection.active = self.layer_measurements
         return layer
 
+    def _decoratable_process_views(self, current_view: int, current_event: int):
+        """Yield (view_data, is_selected) for every process whose radius arc / origin-decay arrow
+        should currently be drawn: the selected process first (is_selected=True), then - only when
+        "Show all processes" is ticked - every OTHER process at this (view, event) too
+        (is_selected=False), the same set _sync_other_processes_layer already shows as dimmed
+        points, so the decorators stay visually consistent with the points they connect. A single
+        shared generator so _refresh_radius_arc and _refresh_origin_decay_arrow (and any future
+        process-scoped decorator) all respect the checkbox identically, rather than each growing
+        its own bespoke all-processes handling.
+        """
+        selected_row = self._get_selected_measurement_row()
+        if selected_row is not None:
+            particle = self.data[selected_row]
+            if particle.event_number == current_event:
+                yield particle.views[current_view], True
+
+        if not self.show_all_processes_checkbox.isChecked():
+            return
+        for i, particle in enumerate(self.data):
+            if i == selected_row:
+                continue
+            if isinstance(particle, CalibrationRow):
+                continue
+            if particle.event_number != current_event:
+                continue
+            yield particle.views[current_view], False
+
     def _setup_radius_arc_layer(self):
-        """A single-shape overlay tracing the currently selected process's radius fit as an arc
+        """A single-shape-per-process overlay tracing each visible process's radius fit as an arc
         through its 3 points (see _calculate.radius_arc_points), in the same colour as their
         highlight ring - the visual counterpart of that colour, showing the 3 points are linked
-        as one radius measurement rather than 3 coincidentally same-coloured ones. Refreshed by
+        as one radius measurement rather than 3 coincidentally same-coloured ones. The selected
+        process's arc is drawn bold; when "Show all processes" is ticked, every other process's
+        arc is drawn too, faded (see _faded_color) - see _decoratable_process_views. Refreshed by
         _refresh_radius_arc, called from _restyle_measurement_points so it updates live on every
-        trigger that already recolours the points (selection, drag, Record/Clear, ...).
-
-        DESIGN NOTE for whoever draws the next process-scoped decorator (an O-D arrow, an O/D
-        shape distinction, ...): this layer currently only ever shows the SELECTED process's own
-        arc - "Show all processes" (see _sync_other_processes_layer) dims OTHER processes' points
-        but does not draw arcs for them at all, a known, deliberately out-of-scope gap as of this
-        writing. When that gets fixed, do it once, generically, for every decorator kind - e.g.
-        rebuild _refresh_radius_arc (and any future decorator refresh) to iterate over "whichever
-        processes are currently supposed to be visible" (just the selected one, or all of them
-        when that checkbox is on, each at its own opacity) rather than hard-coding "the selected
-        process" - so a brand new decorator added later automatically respects the checkbox for
-        free, instead of every decorator needing its own bespoke all-processes handling bolted on
-        after the fact.
+        trigger that already recolours the points (selection, drag, Record/Clear, ...), and
+        directly from the show_decorators_checkbox/show_all_processes_checkbox toggles.
         """
         if RADIUS_ARC_LAYER_NAME in self.viewer.layers:
             return self.viewer.layers[RADIUS_ARC_LAYER_NAME]
@@ -1613,20 +1678,20 @@ class ParticleTracksWidget(QWidget):
     def _refresh_radius_arc(self) -> None:
         if RADIUS_ARC_LAYER_NAME not in self.viewer.layers:
             return
-        layer = self.viewer.layers[RADIUS_ARC_LAYER_NAME]
+        # Mutating a Shapes layer's own .data (remove_selected()/add(), below) can trigger a
+        # callback chain that reenters _restyle_measurement_points, which calls straight back into
+        # this same method before the outer call has finished (see _restyle_measurement_points'
+        # own reentrancy comment for the original occurrence of this). That method's _restyling
+        # guard only protects calls made from INSIDE its own guarded block - it does nothing for
+        # this method being called directly (show_decorators_checkbox/show_all_processes_checkbox
+        # now do exactly that), so this method has to hold the same guard itself for the direct-call
+        # case. _run_guarded_against_restyle_reentrancy makes that the same guard either way: a
+        # direct call acquires it for the duration; a call already made from inside
+        # _restyle_measurement_points's own guarded block (which already holds it) just runs.
+        self._run_guarded_against_restyle_reentrancy(self._do_refresh_radius_arc)
 
-        arc_shape = None
-        selected_row = self._get_selected_measurement_row()
-        if selected_row is not None:
-            current_view = self.viewer.dims.current_step[0]
-            current_event = self.viewer.dims.current_step[1]
-            if self.data[selected_row].event_number == current_event:
-                view_data = self.data[selected_row].views[current_view]
-                if len(view_data.track_points) == 3:
-                    arc_2d = radius_arc_points(*view_data.track_points)
-                    arc_shape = np.array(
-                        [[current_view, current_event, *point] for point in arc_2d]
-                    )
+    def _do_refresh_radius_arc(self) -> None:
+        layer = self.viewer.layers[RADIUS_ARC_LAYER_NAME]
 
         # Assigning `.data = [...]` directly onto a Shapes layer - whether to clear it (`= []`)
         # or to replace its content - crashes in this napari version (a slicing internals bug,
@@ -1640,17 +1705,34 @@ class ParticleTracksWidget(QWidget):
             layer.selected_data = set(range(len(layer.data)))
             layer.remove_selected()
 
-        if arc_shape is not None:
-            layer.add(arc_shape, shape_type="path")
+        if not self.show_decorators_checkbox.isChecked():
+            return
+
+        current_view = self.viewer.dims.current_step[0]
+        current_event = self.viewer.dims.current_step[1]
+        for view_data, is_selected in self._decoratable_process_views(current_view, current_event):
+            if len(view_data.track_points) != 3:
+                continue
+            arc_2d = radius_arc_points(*view_data.track_points)
+            arc_shape = np.array([[current_view, current_event, *point] for point in arc_2d])
+            if is_selected:
+                layer.add(arc_shape, shape_type="path", edge_color=RADIUS_COLOR, edge_width=4)
+            else:
+                layer.add(
+                    arc_shape, shape_type="path", edge_color=_faded_color(RADIUS_COLOR), edge_width=1.5
+                )
 
     def _setup_origin_decay_arrow_layer(self):
-        """A two-shape overlay (a line shaft plus a filled triangle arrowhead - see
-        _calculate.origin_decay_arrow) pointing from the currently selected process's origin
-        vertex to its decay vertex, in green - the length equivalent of the radius arc, showing
-        the two points are linked as one length measurement rather than two independently
-        recorded ones. Refreshed by _refresh_origin_decay_arrow, called from
-        _restyle_measurement_points alongside the radius arc so both update on every trigger
-        that already recolours the points (selection, drag, Record/Clear, ...).
+        """A two-shape-per-process overlay (a line shaft plus a filled triangle arrowhead - see
+        _calculate.origin_decay_arrow) pointing from each visible process's origin vertex to its
+        decay vertex - the length equivalent of the radius arc, showing the two points are linked
+        as one length measurement rather than two independently recorded ones. The selected
+        process's arrow is drawn bold (ARROW_COLOR); when "Show all processes" is ticked, every
+        other process's arrow is drawn too, faded - see _decoratable_process_views. Refreshed by
+        _refresh_origin_decay_arrow, called from _restyle_measurement_points alongside the radius
+        arc so both update on every trigger that already recolours the points (selection, drag,
+        Record/Clear, ...), and directly from the show_decorators_checkbox/show_all_processes_checkbox
+        toggles.
         """
         if ORIGIN_DECAY_ARROW_LAYER_NAME in self.viewer.layers:
             return self.viewer.layers[ORIGIN_DECAY_ARROW_LAYER_NAME]
@@ -1668,25 +1750,11 @@ class ParticleTracksWidget(QWidget):
     def _refresh_origin_decay_arrow(self) -> None:
         if ORIGIN_DECAY_ARROW_LAYER_NAME not in self.viewer.layers:
             return
-        layer = self.viewer.layers[ORIGIN_DECAY_ARROW_LAYER_NAME]
+        # See _refresh_radius_arc's comment on why this needs the same reentrancy guard.
+        self._run_guarded_against_restyle_reentrancy(self._do_refresh_origin_decay_arrow)
 
-        shaft_shape = None
-        head_shape = None
-        selected_row = self._get_selected_measurement_row()
-        if selected_row is not None:
-            current_view = self.viewer.dims.current_step[0]
-            current_event = self.viewer.dims.current_step[1]
-            if self.data[selected_row].event_number == current_event:
-                view_data = self.data[selected_row].views[current_view]
-                if view_data.origin is not None and view_data.decay is not None:
-                    shaft_2d, head_2d = origin_decay_arrow(view_data.origin, view_data.decay)
-                    if shaft_2d is not None:
-                        shaft_shape = np.array(
-                            [[current_view, current_event, *point] for point in shaft_2d]
-                        )
-                        head_shape = np.array(
-                            [[current_view, current_event, *point] for point in head_2d]
-                        )
+    def _do_refresh_origin_decay_arrow(self) -> None:
+        layer = self.viewer.layers[ORIGIN_DECAY_ARROW_LAYER_NAME]
 
         # Same napari Shapes-layer quirks as the radius arc - see _refresh_radius_arc's comment:
         # always clear via select-all + remove_selected (never `.data = [...]`), always add via
@@ -1695,9 +1763,29 @@ class ParticleTracksWidget(QWidget):
             layer.selected_data = set(range(len(layer.data)))
             layer.remove_selected()
 
-        if shaft_shape is not None:
-            layer.add(shaft_shape, shape_type="line")
-            layer.add(head_shape, shape_type="polygon")
+        if not self.show_decorators_checkbox.isChecked():
+            return
+
+        current_view = self.viewer.dims.current_step[0]
+        current_event = self.viewer.dims.current_step[1]
+        for view_data, is_selected in self._decoratable_process_views(current_view, current_event):
+            if view_data.origin is None or view_data.decay is None:
+                continue
+            shaft_2d, head_2d = origin_decay_arrow(view_data.origin, view_data.decay)
+            if shaft_2d is None:
+                continue
+            shaft_shape = np.array([[current_view, current_event, *point] for point in shaft_2d])
+            head_shape = np.array([[current_view, current_event, *point] for point in head_2d])
+            edge_color = ARROW_COLOR if is_selected else _faded_color(ARROW_COLOR)
+            edge_width = 3 if is_selected else 1.5
+            layer.add(shaft_shape, shape_type="line", edge_color=edge_color, edge_width=edge_width)
+            layer.add(
+                head_shape,
+                shape_type="polygon",
+                edge_color=edge_color,
+                face_color=edge_color,
+                edge_width=edge_width,
+            )
 
     def _sync_other_processes_layer(self) -> None:
         """Populate the read-only 'other processes' layer for the current
@@ -1707,9 +1795,9 @@ class ParticleTracksWidget(QWidget):
         interactive layer (colour, symbol - see _role_symbol); the layer's
         own opacity is the only thing that distinguishes 'theirs' from 'mine'.
 
-        Per-POINT styling only, no separately-drawn decorators (an arc, or an O-D arrow) - see
-        _setup_radius_arc_layer's design note for why (those only ever render for the SELECTED
-        process right now, checkbox or not) and how that should eventually generalise.
+        Per-POINT styling only - the arc/arrow decorators for other processes are drawn
+        separately, by _refresh_radius_arc/_refresh_origin_decay_arrow via
+        _decoratable_process_views, which this checkbox also gates.
         """
         if OTHER_PROCESSES_LAYER_NAME not in self.viewer.layers:
             return
