@@ -19,8 +19,8 @@ data_folder=None
 # Developers may wish to uncomment one of the next two lines - the path depends on how deep this
 # checkout sits relative to the sibling cavendish-particle-tracks-data/ repo. From the main repo
 # root, one level up; from a git worktree living inside it (e.g. right-click-tree/), two.
-# data_folder="../cavendish-particle-tracks-data/"          # main repo root
-data_folder="../../cavendish-particle-tracks-data/"        # a worktree one level deeper
+data_folder="../cavendish-particle-tracks-data/"          # main repo root
+# data_folder="../../cavendish-particle-tracks-data/"        # a worktree one level deeper
 
 # Create the plugin:
 plugin_widget = get_singleton(viewer, docking_area=plugin_docking_area, data_folder=data_folder )
