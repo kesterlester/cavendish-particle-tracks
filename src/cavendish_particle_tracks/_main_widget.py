@@ -952,6 +952,32 @@ class ParticleTracksWidget(QWidget):
         finally:
             self._restyling = False
 
+    def _clear_shapes_layer(self, layer: napari.layers.Shapes) -> None:
+        """Remove every shape from a Shapes layer we fully own (the radius-arc / O-D-arrow
+        overlays), ready to redraw it from scratch.
+
+        Deliberately does NOT go via the public `layer.selected_data = set(range(len(layer.data)))`
+        idiom napari itself suggests for this. That property SETTER also computes an on-screen
+        "interaction box" from only the shapes napari currently considers displayed in the active
+        dims slice (`Shapes.interaction_box`), and crashes with a numpy "zero-size array to
+        reduction operation minimum" ValueError whenever NONE of the shapes being selected are
+        considered in-slice at that exact instant - found live via a full traceback: reliably
+        triggered by a rectangle-select drag on a completely different layer (the measurement
+        points layer), which fires a highlight event - and so a call to this method, via
+        _restyle_measurement_points - on every mouse-move tick, fast enough to race napari's own
+        per-layer slice bookkeeping for whichever of our Shapes layers is being cleared.
+
+        Setting the underlying `_selected_data` attribute directly - the exact same assignment the
+        real setter's own first line makes - skips that fragile side computation entirely, and
+        costs nothing: this layer is editable=False, so no interactive selection-box overlay is
+        ever meant to be shown for it anyway. `remove_selected()` itself only reads `selected_data`
+        (the plain getter) and is not affected.
+        """
+        if len(layer.data) == 0:
+            return
+        layer._selected_data = set(range(len(layer.data)))
+        layer.remove_selected()
+
     def _points_claimed_by_other_processes(self, selected_row, current_view, current_event) -> set[tuple[float, float]]:
         """The coordinates every OTHER process (not `selected_row`) has already recorded a role
         for, in this exact (view, event) - origin/decay/track points, from _measurement_roles.
@@ -1700,10 +1726,9 @@ class ParticleTracksWidget(QWidget):
         # (closed - draws an unwanted edge straight back to the start point) regardless of the
         # shape_type this layer was created with, rather than "path" (open) - `.add(...,
         # shape_type="path")` is the only reliable way found to set it correctly, so this always
-        # clears first and re-adds, never reassigns `.data` in place.
-        if len(layer.data) > 0:
-            layer.selected_data = set(range(len(layer.data)))
-            layer.remove_selected()
+        # clears first and re-adds, never reassigns `.data` in place. See _clear_shapes_layer for
+        # why that clearing goes via a direct attribute assignment, not `layer.selected_data = ...`.
+        self._clear_shapes_layer(layer)
 
         if not self.show_decorators_checkbox.isChecked():
             return
@@ -1756,12 +1781,10 @@ class ParticleTracksWidget(QWidget):
     def _do_refresh_origin_decay_arrow(self) -> None:
         layer = self.viewer.layers[ORIGIN_DECAY_ARROW_LAYER_NAME]
 
-        # Same napari Shapes-layer quirks as the radius arc - see _refresh_radius_arc's comment:
-        # always clear via select-all + remove_selected (never `.data = [...]`), always add via
-        # .add(..., shape_type=...) (never rely on `.data =` for the shape type either).
-        if len(layer.data) > 0:
-            layer.selected_data = set(range(len(layer.data)))
-            layer.remove_selected()
+        # Same napari Shapes-layer quirks as the radius arc - see _refresh_radius_arc's comment
+        # and _clear_shapes_layer: always clear via that helper (never `.data = [...]`), always
+        # add via .add(..., shape_type=...) (never rely on `.data =` for the shape type either).
+        self._clear_shapes_layer(layer)
 
         if not self.show_decorators_checkbox.isChecked():
             return
