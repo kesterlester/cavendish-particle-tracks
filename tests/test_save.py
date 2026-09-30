@@ -3,13 +3,19 @@ from glob import glob
 from os import stat
 
 import pytest
-from pytestqt.qtbot import QtBot
-from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QDialogButtonBox, QLineEdit, QMessageBox
+from qtpy.QtWidgets import QFileDialog, QMessageBox
 
 from cavendish_particle_tracks.analysis import CSV_COLUMNS
 
-from .conftest import get_dialog
+
+def _save_as(cpt_widget, monkeypatch, path):
+    """Click Save and answer the file dialog with `path`, without showing the dialog. Patches the
+    static QFileDialog.getSaveFileName that _on_click_save calls, returning what the real dialog
+    would: the chosen path, and the CSV filter the user left selected."""
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", lambda *args, **kwargs: (str(path), "CSV files (*.csv)")
+    )
+    cpt_widget._on_click_save()
 
 
 def test_cant_save_empty(cpt_widget, capsys):
@@ -31,26 +37,13 @@ def test_cant_save_empty(cpt_widget, capsys):
     ],
 )
 def test_save_single_particle(
-    cpt_widget, tmp_path, qtbot: QtBot, capsys, file_name, expect_data_loaded, rejection_reason
+    cpt_widget, tmp_path, monkeypatch, capsys, file_name, expect_data_loaded, rejection_reason
 ):
     # start napari and the particle widget, add a single particle
     cpt_widget.particle_decays_menu.setCurrentIndex(1)  # select the Σ
     assert len(cpt_widget.data) == 1, "Expecting one particle in the table"
 
-    def set_filename_and_close(dialog):
-        qtbot.addWidget(dialog)
-        dialog.setDirectory(str(tmp_path))
-        dialog.findChild(QLineEdit, "fileNameEdit").setText(file_name)
-        buttonbox = dialog.findChild(QDialogButtonBox, "buttonBox")
-        openbutton = buttonbox.children()[1]
-        qtbot.mouseClick(openbutton, Qt.LeftButton, delay=1)
-
-    # Open and retrieve file dialog
-    get_dialog(
-        dialog_trigger=cpt_widget._on_click_save,
-        dialog_action=set_filename_and_close,
-        time_out=5,
-    )
+    _save_as(cpt_widget, monkeypatch, tmp_path / file_name)
 
     if expect_data_loaded:
         expected_file_name = file_name  # Expect the file name to be the one we set
@@ -87,29 +80,14 @@ def test_save_single_particle(
         assert "Saving as .pkl is currently disabled" in captured.out
 
 
-def test_csv_file_has_correct_columns(cpt_widget, tmp_path, qtbot: QtBot):
+def test_csv_file_has_correct_columns(cpt_widget, tmp_path, monkeypatch):
     # start napari and the particle widget, add a single particle
     cpt_widget.particle_decays_menu.setCurrentIndex(4)  # select the Λ
     assert len(cpt_widget.data) == 1, "Expecting one particle in the table"
 
     file_name = "test_saved_file.csv"
 
-    def set_filename_and_close(dialog):
-        # Function of the signature needed to use as a dialog action.
-        # Defined internally so we can access the fixtures without passing.
-        qtbot.addWidget(dialog)
-        dialog.setDirectory(str(tmp_path))
-        dialog.findChild(QLineEdit, "fileNameEdit").setText(file_name)
-        buttonbox = dialog.findChild(QDialogButtonBox, "buttonBox")
-        openbutton = buttonbox.children()[1]
-        qtbot.mouseClick(openbutton, Qt.LeftButton, delay=1)
-
-    # Open and retrieve file dialog
-    get_dialog(
-        dialog_trigger=cpt_widget._on_click_save,
-        dialog_action=set_filename_and_close,
-        time_out=5,
-    )
+    _save_as(cpt_widget, monkeypatch, tmp_path / file_name)
 
     # Check the file has the correct columns
     csv_files = glob(str(tmp_path / "*.csv"))

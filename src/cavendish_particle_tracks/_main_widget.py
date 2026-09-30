@@ -465,7 +465,22 @@ class ParticleTracksWidget(QWidget):
         ):
             button.setCheckable(True)
 
-        self.viewer.window.add_dock_widget(layers_panel, name="layer", area="left")
+        # Listed in napari's Window menu (menu= is napari's own public mechanism for its panels) so
+        # the panel can be brought back after its hide button is used - without this nothing in any
+        # menu restored it, and "Window > Layer List" looked like it should but shows napari's own
+        # list (every internal layer) instead.
+        layers_dock = self.viewer.window.add_dock_widget(
+            layers_panel,
+            name="Particle Tracks Layers",
+            area="left",
+            menu=self.viewer.window.window_menu,
+        )
+        # napari's x button calls destroyOnClose(), which deletes the panel's buttons (still held
+        # by this widget, so later use of them raised RuntimeError) and drops it from the Window
+        # menu. Make x hide the panel like the eye button instead, so it can always be brought
+        # back. destroyOnClose is napari-internal (same in 0.5.6 and 0.9.1): if it ever
+        # disappears this override just does nothing.
+        layers_dock.destroyOnClose = layers_dock.close
 
         self.viewer.layers.selection.events.active.connect(self._on_active_layer_changed)
 

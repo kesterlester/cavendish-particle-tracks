@@ -107,3 +107,33 @@ def test_reusing_the_decay_vertex_as_a_radius_point_collapses_to_one_canvas_poin
         next(idx for idx, roles in cpt_widget._measurement_role_index_map.items()
              if sorted(roles) == ["decay", "track0"])
     ]) == ["decay", "track0"]
+
+
+def _table_cell(cpt_widget, column):
+    item = cpt_widget.table.item(0, cpt_widget._get_table_column_index(column))
+    return "" if item is None else item.text()
+
+
+def test_record_and_clear_update_the_table_cells(cpt_widget):
+    """The numbers shown in the process table follow Record/Clear, not just the stored data."""
+    # three points on a circle of radius 5, then an origin/decay pair 5 apart (a 3-4-5 triangle)
+    _make_row_with_points(
+        cpt_widget, [[5.0, 0.0], [0.0, 5.0], [-5.0, 0.0], [10.0, 10.0], [13.0, 14.0]]
+    )
+
+    cpt_widget.layer_measurements.selected_data = {0, 1, 2}
+    cpt_widget._record_radius()
+    assert _table_cell(cpt_widget, "radius_px") == "5.0"
+
+    cpt_widget.layer_measurements.selected_data = {3}
+    cpt_widget._record_origin_vertex()
+    assert _table_cell(cpt_widget, "decay_length_px") == ""  # no decay vertex yet
+
+    cpt_widget.layer_measurements.selected_data = {4}
+    cpt_widget._record_decay_vertex()
+    assert _table_cell(cpt_widget, "decay_length_px") == "5.0"
+
+    cpt_widget._clear_radius()
+    cpt_widget._clear_decay_vertex()
+    assert _table_cell(cpt_widget, "radius_px") == ""
+    assert _table_cell(cpt_widget, "decay_length_px") == ""
