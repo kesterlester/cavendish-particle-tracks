@@ -67,8 +67,6 @@ class CalibrationManager:
         assert hasattr(self, "_generic_calibration_layers")
         self.set_calibration_layer_visibility_and_focus(False, False)
 
-        self.mark_clean()
-
         # Lastly, setup callbacks:
         self._setup_callbacks()
 
@@ -90,34 +88,6 @@ class CalibrationManager:
             self.viewer.add_layer(new_layer)
 
         return new_layers
-
-    def mark_clean(self):
-        import copy
-        self.last_clean_state = copy.deepcopy(self.state())
-
-    def dirty_things(self):
-        calibrations_are_dirty = False
-
-        #print("JJJJJJJJ", len(self.last_clean_state))
-        #print("KKKKKKKK", len(self.state()))
-
-        for a, A in zip(self.last_clean_state, self.state()):
-            data, meta, _ = a
-            DATA, META, _ = A
-            if (data != DATA).any():
-                calibrations_are_dirty = True
-                break
-            # TODO: Insert meta comparison to
-
-        if calibrations_are_dirty:
-            return [ "calibrations" ]
-        else:
-            return []
-
-    def state(self):
-        ans = tuple(l.as_layer_data_tuple() for l in self.generic_calibration_layers()) + \
-                            ( self.event_calibration_layer().as_layer_data_tuple(), ) # Don't forget that comma!
-        return ans
 
     def event_calibration_layer(self) -> napari.layers.Points:
         # TODO: This could break if the user first created a layer with exactly the right name before we construct.
@@ -847,11 +817,6 @@ After event.type='mouse_release' event.button=2
             'translation': np.array([0, 0, -150, 0]),
         }
         layer.refresh()
-        # mark_clean() was called once already, at __init__ - before this rebuild, and before the
-        # real event count was even knowable. Without re-marking clean here, the dirty-check
-        # baseline stays frozen at that placeholder shape forever, and every future dirty_things()
-        # call crashes trying to compare against it (shape mismatch.
-        self.mark_clean()
 
     def _restore_generic_calibration_layers(self, generic_templates) -> None:
         """Rebuild the merged generic calibration layer from a loaded session's saved fiducial
