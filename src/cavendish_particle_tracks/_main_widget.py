@@ -198,24 +198,58 @@ class ParticleTracksWidget(QWidget):
     layer_measurements: napari.layers.Points
 
     def dirty_things(self):
-        dirty_things = []
-        # try catch as could get a callback before we are ready!
-        try:
+        """The parts of the session with unsaved changes, by the names the quit and load dialogs
+        show: those whose CSV text, as Save would write it now, differs from what was last saved
+        or loaded. Comparing the saved form itself means anything Save would write is noticed,
+        and nothing it wouldn't (view changes, zoom, table sorting) ever is.
+        """
+        saved = getattr(self, "_saved_csv_parts", None)
+        if saved is None:
+            return []  # not fully constructed yet
+        current = self._session_csv_parts()
+        return [part for part in saved if current[part] != saved[part]]
 
-            print(f"DIRTY_THINGS method of _main_widget finds that")
-            print(f"{self.data=}")
-            print("and")
-            print(f"{self._data_at_last_save=}")
-            table_is_dirty = (self.data != self._data_at_last_save)
-            if table_is_dirty:
-                dirty_things.append("decay table")
-        except:
-            # Attributes are missing so we are not even constructed yet!
-            pass
+    def _session_csv_parts(self) -> dict[str, str]:
+        """The text of the CSV file Save would write now, in its two parts, keyed by the names
+        dirty_things() reports them under. Concatenated in order they are the whole file.
+        """
+        # Main table: every process and calibration entry, long format (one CSV column set shared
+        # by both row types, 3 rows each - see CSV_COLUMNS/to_csv_rows for the full design). Unlike
+        # the old single-row format, an empty self.data is fully representable here - the table just
+        # has a header and zero data rows - so the old "CSV can't represent calibration-only data"
+        # restriction no longer applies.
+        main_table = ",".join(CSV_COLUMNS) + "\n" + "".join(
+            particle.to_csv_rows(row_group_id) for row_group_id, particle in enumerate(self.data))
 
-        dirty_things = dirty_things + self.calibration_manager.dirty_things()
+        # Generic fiducial templates are workspace-level, not tied to any event, so they don't fit
+        # the main table's row shape at all - a small second table, separated by a blank line, only
+        # written if there's actually something in it.
+        generic_templates = self.calibration_manager.calibration_data.generic_templates
+        generic_fiducials = ""
+        if any(len(t.positions) > 0 for t in generic_templates):
+            generic_fiducials = "\nview,name,x,y,slot_index\n"
+            for view_index, template in enumerate(generic_templates):
+                for fiducial_name, xy in template.positions.items():
+                    slot_index = template.slot_indices.get(fiducial_name, "")
+                    generic_fiducials += f"{view_index},{fiducial_name},{round_px(xy[0])},{round_px(xy[1])},{slot_index}\n"
 
-        return dirty_things
+        return {"decay table": main_table, "calibrations": generic_fiducials}
+
+    def _mark_session_saved(self, *parts: str) -> None:
+        """Record the session as it would be saved now as the baseline dirty_things() compares
+        against. Given part names, only those parts' baselines are updated.
+
+        Anything that writes the session to disk or replaces it wholesale must call this, or the
+        quit prompt goes wrong - currently: __init__, _load_data_from (image loading resets the
+        generic fiducials), _on_click_load and _on_click_save, all in this file. Nothing else
+        needs to: GUI edits are noticed by comparison, not by being reported.
+        """
+        current = self._session_csv_parts()
+        if not parts or not hasattr(self, "_saved_csv_parts"):
+            self._saved_csv_parts = current
+        else:
+            for part in parts:
+                self._saved_csv_parts[part] = current[part]
 
     def __init__(
         self,
@@ -386,8 +420,6 @@ class ParticleTracksWidget(QWidget):
         # first click - see _on_table_header_clicked for why this can't just be read back from
         # the header's own sortIndicatorSection()/sortIndicatorOrder() instead.
         self._table_sort_state: tuple[int, "Qt.SortOrder"] | None = None
-        import copy
-        self._data_at_last_save = copy.deepcopy(self.data) # Need deepcopy as otherwise changes within ParticleData objects are not spotted!
 
         # self.mag_a = -1.0
         # self.mag_b = 0.0
@@ -409,6 +441,7 @@ class ParticleTracksWidget(QWidget):
         # built) would otherwise hit an AttributeError.
         self._last_synced_dims = None
         self.calibration_manager = CalibrationManager(self, self.viewer)
+        self._mark_session_saved()  # a new session has nothing unsaved in it
 
         if data_folder is not None:
             self._load_data_from(data_folder)
@@ -1634,13 +1667,9 @@ class ParticleTracksWidget(QWidget):
                             (particle.event_number, view_index)] = view_data
         self.calibration_manager._restore_generic_calibration_layers(generic_templates)
         self.calibration_manager._restore_event_calibration_layer()
-        # Same reasoning as the __init__-time fix: without re-marking clean here, the calibration
-        # dirty-check baseline stays stale relative to what was just loaded.
-        self.calibration_manager.mark_clean()
         # refresh_symbol_sizes() is otherwise only triggered by a zoom event.
         self.calibration_manager.refresh_symbol_sizes()
-        import copy
-        self._data_at_last_save = copy.deepcopy(self.data)  # a freshly loaded session isn't "dirty"
+        self._mark_session_saved()  # a freshly loaded session has nothing unsaved in it
 
         self.set_button_availability()
         napari.utils.notifications.show_info("Loaded " + file_name)
@@ -1754,6 +1783,10 @@ class ParticleTracksWidget(QWidget):
         # The generic calibration layer was built with a placeholder single-event count at
         # CalibrationManager construction time, since the real count isn't knowable until now.
         self.calibration_manager.rebuild_generic_layer_for_event_count(image_count_first)
+        # That rebuild put every generic fiducial at its standard default position, so re-baseline
+        # them for the unsaved-changes check - otherwise loading images alone would make them
+        # count as unsaved.
+        self._mark_session_saved("calibrations")
 
         # Move to the first event in the series
         self.viewer.dims.set_current_step(1, 0)
@@ -2653,27 +2686,10 @@ class ParticleTracksWidget(QWidget):
 
         # Save as .csv if file_name ends with .csv
         elif file_name.endswith(".csv"):
+            # The same text dirty_things() compares against, so what counts as unsaved is exactly
+            # what this writes.
             with open(file_name, "w", encoding="UTF8", newline="") as f:
-                # Main table: every process and calibration entry, long format (one CSV column set shared
-                # by both row types, 3 rows each - see CSV_COLUMNS/to_csv_rows for the full design). Unlike
-                # the old single-row format, an empty self.data is fully representable here - the table just
-                # has a header and zero data rows - so the old "CSV can't represent calibration-only data"
-                # restriction no longer applies.
-                f.write(",".join(CSV_COLUMNS) + "\n")
-                for row_group_id, particle in enumerate(self.data):
-                    f.write(particle.to_csv_rows(row_group_id))
-
-                # Generic fiducial templates are workspace-level, not tied to any event, so they don't fit
-                # the main table's row shape at all - a small second table, separated by a blank line, only
-                # written if there's actually something in it.
-                has_generic_calibration_data = any(len(t.positions) > 0 for t in generic_templates)
-                if has_generic_calibration_data:
-                    f.write("\n")
-                    f.write("view,name,x,y,slot_index\n")
-                    for view_index, template in enumerate(generic_templates):
-                        for fiducial_name, xy in template.positions.items():
-                            slot_index = template.slot_indices.get(fiducial_name, "")
-                            f.write(f"{view_index},{fiducial_name},{round_px(xy[0])},{round_px(xy[1])},{slot_index}\n")
+                f.write("".join(self._session_csv_parts().values()))
 
         else:
             self.msg = QMessageBox()
@@ -2686,8 +2702,5 @@ class ParticleTracksWidget(QWidget):
             self.msg.show()
             return
 
-        #print(f"SSSSSAAAVING BEFORE {self._data_at_last_save=}")
-        import copy
-        self._data_at_last_save = copy.deepcopy(self.data) # mark as clean!  Need deepcopy as otherwise changes within ParticleData objects are not spotted!
-        #print(f"SSSSSAAAVING AFTER {self._data_at_last_save=}")
+        self._mark_session_saved()
         napari.utils.notifications.show_info("Data saved to " + file_name)
