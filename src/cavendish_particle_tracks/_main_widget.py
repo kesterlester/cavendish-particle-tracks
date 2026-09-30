@@ -226,6 +226,19 @@ class ParticleTracksWidget(QWidget):
         super().__init__()
         self.viewer: napari.Viewer = napari_viewer
 
+        # napari 0.5's Shapes line drawing calls np.divide(where=...) without out=, which recent
+        # numpy warns about on every call. It's harmless here (at worst one oddly drawn joint where
+        # a line doubles straight back on itself), but napari shows it as a pop-up the first time
+        # an arc, arrow or decay-angle line is drawn - typically on loading a CSV. Silenced for
+        # exactly that message from exactly that napari file. napari 0.9.1 no longer has that
+        # code, so this can go once the plugin moves to napari >= 0.6.
+        warnings.filterwarnings(
+            "ignore",
+            message="'where' used without 'out'",
+            category=UserWarning,
+            module=r"napari\.layers\.shapes\._shapes_utils",
+        )
+
         # In normal operation: the user is forced to load data before they can do anything.
         self.bypass_force_load_data = get_bypass()
         # "Load images" persists across restarts (via QSettings - a plist on macOS, the registry
