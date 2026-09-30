@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import tifffile as tf
-from qtpy.QtWidgets import QMessageBox
+from qtpy.QtCore import QCoreApplication, QEvent
+from qtpy.QtWidgets import QDockWidget, QMessageBox, QPushButton
 
 from cavendish_particle_tracks._main_widget import (
     IMAGE_LAYER_NAME,
@@ -140,6 +141,29 @@ def test_show_hide_buttons(cpt_widget: ParticleTracksWidget):
     cpt_widget.particle_decays_menu.setCurrentIndex(4)  # Λ⁰ ⇨ p + π⁻, newly added and selected
     assert cpt_widget.delete_process.isEnabled() is True
     assert cpt_widget.decay_angles_nav_button.isEnabled() is True
+
+
+@pytest.mark.parametrize("title_bar_button", ["hide this panel", "close this panel"])
+def test_layers_panel_can_always_be_brought_back(cpt_widget: ParticleTracksWidget, qapp, title_bar_button):
+    """Neither of the panel's title-bar buttons (eye, x) loses it: it stays in the Window menu,
+    which brings it back, and its buttons still work. Guards the x override in _main_widget -
+    napari's own x deletes the panel, after which the plugin crashed using its buttons."""
+    name = "Particle Tracks Layers"
+    window = cpt_widget.viewer.window
+    panel = next(d for d in window._qt_window.findChildren(QDockWidget) if getattr(d, "name", None) == name)
+    assert not panel.isHidden()
+    next(b for b in panel.findChildren(QPushButton) if b.toolTip() == title_bar_button).click()
+    for _ in range(2):  # let any deferred deletion actually happen, as the real event loop would
+        qapp.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert panel.isHidden()
+
+    cpt_widget.viewer.add_image(np.random.random((100, 100)), name=IMAGE_LAYER_NAME)
+    cpt_widget.particle_decays_menu.setCurrentIndex(4)  # Λ⁰: enables the panel's Decay Angles button
+    assert cpt_widget.decay_angles_nav_button.isEnabled() is True
+
+    next(a for a in window.window_menu.actions() if a.text() == name).trigger()
+    assert not panel.isHidden()
 
 
 def _close_napari_window(cpt_widget, monkeypatch, answer):
