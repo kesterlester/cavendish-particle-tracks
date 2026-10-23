@@ -354,7 +354,7 @@ EXPECTED_PROCESSES_NICE_TO_ASCII = {
     "Add process": "Add process",
     "Σ⁺ ⇨ p + π⁰": "Sigma+_to_p_pi0",
     "Σ⁺ ⇨ n + π⁺": "Sigma+_to_n_pi+",
-    "Σ⁻ ⇨ n + π⁻": "Sigma-_to_p_pi-",
+    "Σ⁻ ⇨ n + π⁻": "Sigma-_to_n_pi-",
     "Λ⁰ ⇨ p + π⁻": "Lambda0_to_p_pi-",
     "Λ⁰ ⇨ n + π⁰": "Lambda0_to_m_pi0",
 }
