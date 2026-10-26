@@ -356,7 +356,7 @@ EXPECTED_PROCESSES_NICE_TO_ASCII = {
     "Σ⁺ ⇨ n + π⁺": "Sigma+_to_n_pi+",
     "Σ⁻ ⇨ n + π⁻": "Sigma-_to_n_pi-",
     "Λ⁰ ⇨ p + π⁻": "Lambda0_to_p_pi-",
-    "Λ⁰ ⇨ n + π⁰": "Lambda0_to_m_pi0",
+    "Λ⁰ ⇨ n + π⁰": "Lambda0_to_n_pi0",
 }
 EXPECTED_PROCESSES_NICE = [
     key for key in EXPECTED_PROCESSES_NICE_TO_ASCII
